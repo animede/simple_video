@@ -7817,14 +7817,21 @@ body.simple-video-enabled #simpleVideoLeft {
 }
 
 /* Character sheet no-bg checkbox label */
+/* Character sheet group: nobg-label + sheet-btn as a connected pill */
+.simple-video-charsheet-group {
+    display: flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+}
 .simple-video-generate-row .simple-video-charsheet-nobg-label {
     display: flex;
     align-items: center;
     gap: 6px;
     flex: 0 0 auto;
     padding: 8px 12px;
-    border-radius: 10px;
+    border-radius: 10px 0 0 10px;
     border: 1.5px solid rgba(255, 255, 255, 0.15);
+    border-right: none;
     background: rgba(255, 255, 255, 0.06);
     color: var(--text-secondary, #a0a0b0);
     font-size: 12px;
@@ -7833,7 +7840,6 @@ body.simple-video-enabled #simpleVideoLeft {
     user-select: none;
     transition: border-color 0.2s, background 0.2s, color 0.2s;
     white-space: nowrap;
-    order: 2;
 }
 .simple-video-generate-row .simple-video-charsheet-nobg-label:hover {
     border-color: rgba(255, 255, 255, 0.3);
@@ -7851,6 +7857,10 @@ body.simple-video-enabled #simpleVideoLeft {
     border-color: #818cf8;
     background: rgba(129, 140, 248, 0.12);
     color: #818cf8;
+}
+/* Sheet button inside the group: left edge attached to label */
+.simple-video-charsheet-group .simple-video-sheet-btn {
+    border-radius: 0 10px 10px 0;
 }
 
 .simple-video-t2a-actions-row {

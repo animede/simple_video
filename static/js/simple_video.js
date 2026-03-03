@@ -1431,6 +1431,7 @@ function renderSimpleVideoUI() {
             <button class="simple-video-generate-btn" id="simpleVideoImageGenBtn">
                 <i class="fas fa-wand-magic-sparkles"></i> 初期画像を生成
             </button>
+            <div class="simple-video-charsheet-group">
             <label class="simple-video-charsheet-nobg-label" title="キャラクターシート生成前に背景を削除し、背景なしモデルで生成します">
                 <input type="checkbox" id="simpleVideoCharSheetNobgCheck">
                 <i class="fas fa-eraser"></i> 背景なし
@@ -1438,6 +1439,7 @@ function renderSimpleVideoUI() {
             <button class="simple-video-generate-btn simple-video-sheet-btn" id="simpleVideoCharSheetGenBtn" type="button" title="ref1画像からキャラクターシートを生成し内部参照画像に登録">
                 <i class="fas fa-id-card"></i> キャラクターシート
             </button>
+            </div>
             <button class="simple-video-stop-btn" id="simpleVideoImageStopBtn" type="button" disabled>
                 <i class="fas fa-stop"></i> 生成中止
             </button>
