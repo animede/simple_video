@@ -551,6 +551,9 @@ const SimpleVideoUI = {
         // Character sheet image (generated via キャラクターシートを生成 button)
         characterSheetImage: null, // { jobId, filename, previewUrl }
 
+        // Whether to run background removal before initial image / character sheet generation
+        removeBgBeforeGenerate: false,
+
         // Prepared initial frame for VIDEO generation (reference image + scene prompt -> image)
         // Used by the Video Generate button when available.
         preparedVideoInitialImage: null, // { jobId, filename, prompt, presetId }
@@ -745,6 +748,9 @@ function loadSimpleVideoState() {
             // Key image analysis (VLM)
             SimpleVideoUI.state.keyImageAnalysis = String(parsed.keyImageAnalysis || '') || null;
             SimpleVideoUI.state.keyImageAnalysisRaw = parsed.keyImageAnalysisRaw || null;
+
+            // Background removal option
+            SimpleVideoUI.state.removeBgBeforeGenerate = !!parsed.removeBgBeforeGenerate;
         }
     } catch (_e) {
         console.warn('[SimpleVideo] Failed to load state');
@@ -1412,6 +1418,10 @@ function renderSimpleVideoUI() {
             </div>
 
             <div class="simple-video-generate-row">
+            <label class="simple-video-removebg-label" title="生成前に入力画像の背景を自動削除します">
+                <input type="checkbox" id="simpleVideoRemoveBgCheck">
+                <i class="fas fa-scissors"></i> 背景を削除
+            </label>
             <button class="simple-video-generate-btn" id="simpleVideoImageGenBtn">
                 <i class="fas fa-wand-magic-sparkles"></i> 初期画像を生成
             </button>
@@ -2189,6 +2199,16 @@ function attachSimpleVideoEventListeners() {
             invalidateGeneratedIntermediateImages();
             saveSimpleVideoState();
             updateGenerateButtonState();
+        });
+    }
+
+    // Background removal checkbox
+    const removeBgCheck = document.getElementById('simpleVideoRemoveBgCheck');
+    if (removeBgCheck) {
+        removeBgCheck.checked = state.removeBgBeforeGenerate || false;
+        removeBgCheck.addEventListener('change', () => {
+            state.removeBgBeforeGenerate = removeBgCheck.checked;
+            saveSimpleVideoState();
         });
     }
 
@@ -7761,6 +7781,37 @@ function clearSimpleVideoOutput() {
     `;
 }
 
+/**
+ * If state.removeBgBeforeGenerate is ON, runs the remove_bg workflow on the given
+ * filename and returns the resulting output filename.  Otherwise returns the original
+ * filename unchanged.  Throws on error.
+ */
+async function removeBackgroundIfEnabled(inputFilename) {
+    const { state } = SimpleVideoUI;
+    if (!state.removeBgBeforeGenerate) return inputFilename;
+    if (!inputFilename) return inputFilename;
+
+    setSimpleVideoProgress('🖼️ 背景削除中...', 0);
+
+    const res = await runWorkflowStep({
+        workflow: 'remove_bg_v1_0',
+        label: '背景削除',
+        requestParams: { input_image: inputFilename },
+        stepIndex: 0,
+        totalSteps: 1,
+    });
+
+    const outputs = Array.isArray(res.outputs) ? res.outputs : [];
+    const imgOut = outputs.find((o) =>
+        String(o?.filename || '').toLowerCase().includes('removebg')
+    ) || outputs.filter((o) =>
+        /\.(png|jpg|jpeg|webp)$/i.test(String(o?.filename || ''))
+    ).pop() || null;
+
+    if (!imgOut?.filename) throw new Error('背景削除: 出力画像が見つかりませんでした');
+    return String(imgOut.filename);
+}
+
 async function generateCharacterSheet() {
     const { state } = SimpleVideoUI;
     const isBusy = !!(state.isGenerating || state.isPromptGenerating || state.isImageGenerating);
@@ -7799,12 +7850,13 @@ async function generateCharacterSheet() {
     setSimpleVideoProgress('🎭 キャラクターシート生成: 準備中...', 0);
 
     try {
+        const effectiveFilename = await removeBackgroundIfEnabled(inputFilename);
         const res = await runWorkflowStep({
             workflow: 'character_sheet_card_v1_0',
             label: 'キャラクターシート生成',
-            requestParams: { input_image: inputFilename },
-            stepIndex: 0,
-            totalSteps: 1,
+            requestParams: { input_image: effectiveFilename },
+            stepIndex: state.removeBgBeforeGenerate ? 1 : 0,
+            totalSteps: state.removeBgBeforeGenerate ? 2 : 1,
         });
 
         // カード画像（CharSheet-CARD プレフィックス）を優先して取得
@@ -7927,6 +7979,8 @@ async function startInitialImageGeneration() {
         if (!primaryImage && characterImageFilenames.length > 0) {
             primaryImage = characterImageFilenames[0];
         }
+        // Remove background before generation if enabled
+        if (primaryImage) primaryImage = await removeBackgroundIfEnabled(primaryImage);
         if (primaryImage) {
             params.input_image = primaryImage;
         }
