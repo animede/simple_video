@@ -8625,6 +8625,12 @@ async function startIntermediateImageGeneration(options = {}) {
                 }
             }
 
+            // When using character sheet as reference, prepend hint before wrap so
+            // wrapQwen2511EditInstructionPrompt detects 'picture 1' and skips 'Preserve composition'.
+            if (usesCharacterImage && useSheetAsRef) {
+                params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
+            }
+
             if (isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
                 params.prompt = wrapQwen2511EditInstructionPrompt(params.prompt);
             }
@@ -9868,15 +9874,16 @@ function computeRef3SceneI2IConfig(baseWorkflow) {
  * @returns {string} hint text to prepend to prompt
  */
 function buildCharSheetRefPromptHint() {
-    // Must start with "Edit picture 1" so wrapQwen2511EditInstructionPrompt() recognises it
-    // as a complete instruction and does NOT prepend "Preserve the subject identity and overall
-    // composition" (which would cause the model to reproduce the multi-panel sheet layout).
+    // Starts with "Edit picture 1" so wrapQwen2511EditInstructionPrompt() detects it
+    // and skips its "Preserve composition" prefix (which would cause the model to
+    // reproduce the multi-panel character-sheet layout).
+    // The hint also guards explicitly against time-lapse / before-after / split-panel
+    // prompts that would otherwise produce multi-frame output.
     return [
-        'Edit picture 1 to show this character in the scene described below.',
-        'Picture 1 is a CHARACTER SHEET (multi-view reference showing the character from multiple angles: front, back, side, etc.).',
-        'Use it ONLY to extract character identity: face, hair style, clothing, colors, body proportions.',
-        'Generate ONE single scene image. Do NOT reproduce the character sheet layout.',
-        'Do NOT output multiple panels, multiple views, or any reference sheet format.',
+        'Edit picture 1 to produce exactly ONE single still scene image as described below.',
+        'Use picture 1 only to extract the character appearance — do NOT reproduce its layout, composition, or panel structure.',
+        'Output exactly one image. Do NOT create split panels, before/after views, multiple frames, or any time-lapse or transition layout.',
+        'Scene:',
     ].join(' ');
 }
 
@@ -11034,6 +11041,11 @@ async function startGeneration() {
                     if (hint) params.prompt = hint + '\n' + params.prompt;
                 }
 
+                // When using character sheet as reference, prepend hint before wrap.
+                if (useSheetAsRef2) {
+                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
+                }
+
                 // For Qwen 2512 (I2I), use prompt as-is (not EDIT instruction)
                 // For Qwen 2511 (EDIT), wrap prompt
                 if (isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
@@ -11321,6 +11333,11 @@ async function startGeneration() {
                     params.input_image_2 = state.dropSlots[2].filename;
                     const hint = buildRef3PromptHint(ref3Mode, 2);
                     if (hint) params.prompt = hint + '\n' + params.prompt;
+                }
+
+                // When using character sheet as reference, prepend hint before wrap.
+                if (useSheetAsRef3) {
+                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
                 }
 
                 if (isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
