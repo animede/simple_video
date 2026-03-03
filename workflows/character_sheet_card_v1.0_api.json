@@ -68,7 +68,7 @@
   },
   "10": {
     "inputs": {
-      "value": "Show the character in a full body front view, facing directly toward the camera, neutral standing A-pose with arms slightly away from the body, full figure visible from head to toe"
+      "value": "Show the character in a full body front view, facing directly toward the camera, neutral standing A-pose with arms slightly away from the body, full figure visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -108,7 +108,7 @@
   },
   "13": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -238,7 +238,7 @@
   },
   "20": {
     "inputs": {
-      "value": "Show the character from behind in a full body back view, rear facing the camera, neutral standing pose, showing all back details, hair, costume and accessories from behind, full figure head to toe"
+      "value": "Show the character from behind in a full body back view, rear facing the camera, neutral standing pose, showing all back details, hair, costume and accessories from behind, full figure head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -278,7 +278,7 @@
   },
   "23": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -408,7 +408,7 @@
   },
   "30": {
     "inputs": {
-      "value": "Show the character in a full body left side profile view, character facing to the left, neutral standing pose, showing the complete left side silhouette from head to toe"
+      "value": "Show the character in a full body left side profile view, character facing to the left, neutral standing pose, showing the complete left side silhouette from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -448,7 +448,7 @@
   },
   "33": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -578,7 +578,7 @@
   },
   "40": {
     "inputs": {
-      "value": "Show the character in a full body right side profile view, character facing to the right, neutral standing pose, showing the complete right side silhouette from head to toe"
+      "value": "Show the character in a full body right side profile view, character facing to the right, neutral standing pose, showing the complete right side silhouette from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -618,7 +618,7 @@
   },
   "43": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -748,7 +748,7 @@
   },
   "50": {
     "inputs": {
-      "value": "Show the character from a 3/4 front-left angle, neutral standing pose, showing both front and left side details, full body visible from head to toe"
+      "value": "Show the character from a 3/4 front-left angle, neutral standing pose, showing both front and left side details, full body visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -788,7 +788,7 @@
   },
   "53": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -918,7 +918,7 @@
   },
   "60": {
     "inputs": {
-      "value": "Show the character from a 3/4 front-right angle, neutral standing pose, showing both front and right side details, full body visible from head to toe"
+      "value": "Show the character from a 3/4 front-right angle, neutral standing pose, showing both front and right side details, full body visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -958,7 +958,7 @@
   },
   "63": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -1088,7 +1088,7 @@
   },
   "70": {
     "inputs": {
-      "value": "Show the character from a 3/4 back-left angle, neutral standing pose, showing back and left side details, full body visible from head to toe"
+      "value": "Show the character from a 3/4 back-left angle, neutral standing pose, showing back and left side details, full body visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -1128,7 +1128,7 @@
   },
   "73": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
@@ -1258,7 +1258,7 @@
   },
   "80": {
     "inputs": {
-      "value": "Show the character face in a close-up portrait, straight-on view toward the camera, neutral expression, face and upper body visible, showing all facial features and hair details clearly"
+      "value": "Show the character face in a close-up portrait, straight-on view toward the camera, neutral expression, face and upper body visible, showing all facial features and hair details clearly, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
     },
     "class_type": "PrimitiveStringMultiline",
     "_meta": {
@@ -1298,7 +1298,7 @@
   },
   "83": {
     "inputs": {
-      "prompt": "",
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
       "clip": [
         "3",
         0
