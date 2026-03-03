@@ -1,0 +1,297 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "smoothMixWan22I2VT2V_t2vHighV20.safetensors"
+    }
+  },
+  "2": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "smoothMixWan22I2VT2V_t2vLowV20.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "masterpiece, best quality, cinematic lighting, 4K, high detail, beautiful anime girl, detailed face, expressive eyes, flowing hair, natural skin texture",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "11": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "cafe interior, warm ambient lighting, bokeh background, soft focus, cozy atmosphere",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "12": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "smooth motion, natural movement, gentle breeze, flowing fabric, cinematic camera movement",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "20": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "10",
+        0
+      ],
+      "conditioning_2": [
+        "11",
+        0
+      ]
+    }
+  },
+  "21": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "20",
+        0
+      ],
+      "conditioning_2": [
+        "12",
+        0
+      ]
+    }
+  },
+  "22": {
+    "class_type": "ConditioningAverage",
+    "inputs": {
+      "conditioning_to": [
+        "21",
+        0
+      ],
+      "conditioning_from": [
+        "21",
+        0
+      ],
+      "conditioning_to_strength": 1.0
+    }
+  },
+  "70": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "22",
+        0
+      ],
+      "start": 0.0,
+      "end": 0.33
+    }
+  },
+  "71": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "camera pan, slow movement, character interaction, natural expressions, ambient sounds",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "72": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "71",
+        0
+      ],
+      "start": 0.33,
+      "end": 0.66
+    }
+  },
+  "75": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "dynamic angle, camera movement, zoom in, dramatic lighting, intense expression, action peak",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "76": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "75",
+        0
+      ],
+      "start": 0.66,
+      "end": 1.0
+    }
+  },
+  "73": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "70",
+        0
+      ],
+      "conditioning_2": [
+        "72",
+        0
+      ]
+    }
+  },
+  "77": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "73",
+        0
+      ],
+      "conditioning_2": [
+        "76",
+        0
+      ]
+    }
+  },
+  "30": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "worst quality, low quality, blurry, distorted, deformed, ugly, bad anatomy, watermark, text, logo, signature, low resolution, jpeg artifacts, over-saturated, overexposed",
+      "clip": [
+        "1",
+        1
+      ]
+    }
+  },
+  "40": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "1",
+        0
+      ],
+      "shift": 8.0
+    }
+  },
+  "41": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "shift": 8.0
+    }
+  },
+  "50": {
+    "class_type": "EmptyHunyuanLatentVideo",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "length": 64,
+      "batch_size": 1
+    }
+  },
+  "51": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "40",
+        0
+      ],
+      "add_noise": "enable",
+      "noise_seed": 326677479,
+      "steps": 6,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "77",
+        0
+      ],
+      "negative": [
+        "30",
+        0
+      ],
+      "latent_image": [
+        "50",
+        0
+      ],
+      "start_at_step": 0,
+      "end_at_step": 3,
+      "return_with_leftover_noise": "enable"
+    }
+  },
+  "52": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "41",
+        0
+      ],
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 6,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "77",
+        0
+      ],
+      "negative": [
+        "30",
+        0
+      ],
+      "latent_image": [
+        "51",
+        0
+      ],
+      "start_at_step": 3,
+      "end_at_step": 1000,
+      "return_with_leftover_noise": "disable"
+    }
+  },
+  "60": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "52",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    }
+  },
+  "61": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "60",
+        0
+      ],
+      "fps": 16
+    }
+  },
+  "62": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "61",
+        0
+      ],
+      "filename_prefix": "video/Wan2.2 Smooth T2V Advanced",
+      "format": "mp4",
+      "codec": "h264"
+    }
+  }
+}

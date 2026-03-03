@@ -1,0 +1,206 @@
+{
+  "21": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "16",
+        0
+      ],
+      "vae": [
+        "180",
+        0
+      ]
+    }
+  },
+  "180": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "16": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "153",
+        0
+      ],
+      "seed": 123456,
+      "control_after_generate": "randomize",
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "denoise": 1,
+      "positive": [
+        "173",
+        0
+      ],
+      "negative": [
+        "183",
+        0
+      ],
+      "latent_image": [
+        "161",
+        0
+      ]
+    }
+  },
+  "156": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": ""
+    }
+  },
+  "185": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "179": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "122": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "186",
+        0
+      ],
+      "shift": 3
+    }
+  },
+  "153": {
+    "class_type": "CFGNorm",
+    "inputs": {
+      "model": [
+        "122",
+        0
+      ],
+      "strength": 1
+    }
+  },
+  "186": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "185",
+        0
+      ],
+      "lora_name": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1
+    }
+  },
+  "132": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.jpg",
+      "upload": "image"
+    }
+  },
+  "161": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": [
+        "148",
+        0
+      ],
+      "height": [
+        "148",
+        1
+      ],
+      "batch_size": 1
+    }
+  },
+  "148": {
+    "class_type": "GetImageSize",
+    "inputs": {
+      "image": [
+        "168",
+        0
+      ]
+    }
+  },
+  "183": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "179",
+        0
+      ]
+    }
+  },
+  "173": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "179",
+        0
+      ],
+      "vae": [
+        "180",
+        0
+      ],
+      "image1": [
+        "168",
+        0
+      ],
+      "image2": [
+        "174",
+        0
+      ],
+      "image3": [
+        "176",
+        0
+      ],
+      "prompt": [
+        "156",
+        0
+      ]
+    }
+  },
+  "168": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "image": [
+        "132",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 64
+    }
+  },
+  "174": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.jpg",
+      "upload": "image"
+    }
+  },
+  "176": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.jpg",
+      "upload": "image"
+    }
+  },
+  "66": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "image/i2i_qwen_fp8_lightning4",
+      "images": [
+        "21",
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,321 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 53301743568250,
+      "steps": 4,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "66",
+        0
+      ],
+      "positive": [
+        "69",
+        0
+      ],
+      "negative": [
+        "70",
+        0
+      ],
+      "latent_image": [
+        "73",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler (4 Steps for Lightning)"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": [
+        "84",
+        2
+      ],
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "76",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "37": {
+    "inputs": {
+      "unet_name": "qwen_image_layered_fp8mixed.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "38": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  },
+  "39": {
+    "inputs": {
+      "vae_name": "qwen_image_layered_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "60": {
+    "inputs": {
+      "filename_prefix": "qwen_layered_lightning4",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "画像を保存"
+    }
+  },
+  "66": {
+    "inputs": {
+      "shift": 1,
+      "model": [
+        "93",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "69": {
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "71",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参照潜在変数"
+    }
+  },
+  "70": {
+    "inputs": {
+      "conditioning": [
+        "7",
+        0
+      ],
+      "latent": [
+        "71",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参照潜在変数"
+    }
+  },
+  "71": {
+    "inputs": {
+      "pixels": [
+        "80",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "73": {
+    "inputs": {
+      "width": [
+        "86",
+        0
+      ],
+      "height": [
+        "86",
+        1
+      ],
+      "length": 25,
+      "batch_size": 1
+    },
+    "class_type": "EmptyHunyuanLatentVideo",
+    "_meta": {
+      "title": "EmptyHunyuanLatentVideo"
+    }
+  },
+  "74": {
+    "inputs": {
+      "image": "flux2_3ref_edit_00009_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "76": {
+    "inputs": {
+      "dim": "t",
+      "slice_size": 1,
+      "samples": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "LatentCutToBatch",
+    "_meta": {
+      "title": "LatentCutToBatch"
+    }
+  },
+  "79": {
+    "inputs": {
+      "text_0": "The image shows three anime girls standing next to each other in an airport. In the background, there are chairs, people, pillars, boards, and other objects. At the top of the image, there is a ceiling with lights. All three girls have human hair.",
+      "text": [
+        "84",
+        2
+      ]
+    },
+    "class_type": "ShowText|pysssss",
+    "_meta": {
+      "title": "Show Text 🐍"
+    }
+  },
+  "80": {
+    "inputs": {
+      "upscale_method": "bilinear",
+      "width": [
+        "86",
+        0
+      ],
+      "height": [
+        "86",
+        1
+      ],
+      "crop": "disabled",
+      "image": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "画像を拡大"
+    }
+  },
+  "84": {
+    "inputs": {
+      "text_input": "",
+      "task": "detailed_caption",
+      "fill_mask": true,
+      "keep_model_loaded": false,
+      "max_new_tokens": 1024,
+      "num_beams": 3,
+      "do_sample": true,
+      "output_mask_select": "",
+      "seed": 811082381686276,
+      "image": [
+        "74",
+        0
+      ],
+      "florence2_model": [
+        "85",
+        0
+      ]
+    },
+    "class_type": "Florence2Run",
+    "_meta": {
+      "title": "Florence2Run"
+    }
+  },
+  "85": {
+    "inputs": {
+      "model": "microsoft/Florence-2-base",
+      "precision": "fp16",
+      "attention": "sdpa",
+      "convert_to_safetensors": false
+    },
+    "class_type": "DownloadAndLoadFlorence2Model",
+    "_meta": {
+      "title": "DownloadAndLoadFlorence2Model"
+    }
+  },
+  "86": {
+    "inputs": {
+      "square_tolerance": 3,
+      "image": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "NearestQwenResolution",
+    "_meta": {
+      "title": "📐 Nearest Qwen Resolution"
+    }
+  },
+  "93": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Lightning-4steps-V2.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "37",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Lightning 4-Step LoRA"
+    }
+  }
+}

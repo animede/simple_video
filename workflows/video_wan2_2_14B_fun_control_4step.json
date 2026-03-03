@@ -1,0 +1,320 @@
+{
+  "162": {
+    "inputs": {
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+      "clip": [
+        "167",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "163": {
+    "inputs": {
+      "fps": 16,
+      "images": [
+        "164",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "動画を作成"
+    }
+  },
+  "164": {
+    "inputs": {
+      "samples": [
+        "175",
+        0
+      ],
+      "vae": [
+        "168",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "165": {
+    "inputs": {
+      "unet_name": "wan2.2_fun_control_high_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "166": {
+    "inputs": {
+      "unet_name": "wan2.2_fun_control_low_noise_14B_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "167": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  },
+  "168": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "169": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 342522439403882,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 2,
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "176",
+        0
+      ],
+      "positive": [
+        "180",
+        0
+      ],
+      "negative": [
+        "180",
+        1
+      ],
+      "latent_image": [
+        "180",
+        2
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "Kサンプラー（高度）"
+    }
+  },
+  "170": {
+    "inputs": {
+      "filename_prefix": "video/wan2.2_fun_control",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "163",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "171": {
+    "inputs": {
+      "video": [
+        "174",
+        0
+      ]
+    },
+    "class_type": "GetVideoComponents",
+    "_meta": {
+      "title": "ビデオコンポーネントの取得"
+    }
+  },
+  "172": {
+    "inputs": {
+      "images": [
+        "173",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "画像プレビュー"
+    }
+  },
+  "173": {
+    "inputs": {
+      "low_threshold": 0.1,
+      "high_threshold": 0.6,
+      "image": [
+        "171",
+        0
+      ]
+    },
+    "class_type": "Canny",
+    "_meta": {
+      "title": "キャニー"
+    }
+  },
+  "174": {
+    "inputs": {
+      "file": "ComfyUI_00001_.mp4"
+    },
+    "class_type": "LoadVideo",
+    "_meta": {
+      "title": "ビデオを読み込む"
+    }
+  },
+  "175": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 2,
+      "end_at_step": 4,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "177",
+        0
+      ],
+      "positive": [
+        "180",
+        0
+      ],
+      "negative": [
+        "180",
+        1
+      ],
+      "latent_image": [
+        "169",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "Kサンプラー（高度）"
+    }
+  },
+  "176": {
+    "inputs": {
+      "shift": 8.000000000000002,
+      "model": [
+        "181",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "モデルサンプリングSD3"
+    }
+  },
+  "177": {
+    "inputs": {
+      "shift": 8.000000000000002,
+      "model": [
+        "182",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "モデルサンプリングSD3"
+    }
+  },
+  "178": {
+    "inputs": {
+      "image": "20251011_Qwen-Image_sample1.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "179": {
+    "inputs": {
+      "text": "On a sunny summer day, there are marshmallow - like clouds, and the sunlight is bright and warm. A girl with white curly double - ponytails is wearing unique sunglasses, distinctive clothes and shoes. Her posture is natural and full of dynamic tension. The background is the scene of the Leaning Tower of Pisa in Italy, emphasizing the realistic contrast of details in reality. The whole picture is in a realistic 3D style, rich in details and with a relaxed atmosphere. She is dancing slowly, waving her hands.",
+      "clip": [
+        "167",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "180": {
+    "inputs": {
+      "width": 640,
+      "height": 640,
+      "length": 81,
+      "batch_size": 1,
+      "positive": [
+        "179",
+        0
+      ],
+      "negative": [
+        "162",
+        0
+      ],
+      "vae": [
+        "168",
+        0
+      ],
+      "ref_image": [
+        "178",
+        0
+      ],
+      "control_video": [
+        "173",
+        0
+      ]
+    },
+    "class_type": "Wan22FunControlToVideo",
+    "_meta": {
+      "title": "Wan22FunControlToVideo"
+    }
+  },
+  "181": {
+    "inputs": {
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+      "strength_model": 1,
+      "model": [
+        "165",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "182": {
+    "inputs": {
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+      "strength_model": 1,
+      "model": [
+        "166",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  }
+}

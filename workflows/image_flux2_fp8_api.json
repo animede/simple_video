@@ -1,0 +1,321 @@
+{
+  "42": {
+    "inputs": {
+      "image": "ComfyUI_00001_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "46": {
+    "inputs": {
+      "image": "ComfyUI_00165_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "64": {
+    "inputs": {
+      "filename_prefix": "Flux2",
+      "images": [
+        "63:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "画像を保存"
+    }
+  },
+  "63:22": {
+    "inputs": {
+      "model": [
+        "63:63",
+        0
+      ],
+      "conditioning": [
+        "63:39",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本ガイダー"
+    }
+  },
+  "63:10": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "63:40": {
+    "inputs": {
+      "pixels": [
+        "63:41",
+        0
+      ],
+      "vae": [
+        "63:10",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "63:44": {
+    "inputs": {
+      "pixels": [
+        "63:45",
+        0
+      ],
+      "vae": [
+        "63:10",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "63:41": {
+    "inputs": {
+      "upscale_method": "area",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "46",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "63:26": {
+    "inputs": {
+      "guidance": 4,
+      "conditioning": [
+        "63:6",
+        0
+      ]
+    },
+    "class_type": "FluxGuidance",
+    "_meta": {
+      "title": "フラックスガイダンス"
+    }
+  },
+  "63:8": {
+    "inputs": {
+      "samples": [
+        "63:13",
+        0
+      ],
+      "vae": [
+        "63:10",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "63:13": {
+    "inputs": {
+      "noise": [
+        "63:25",
+        0
+      ],
+      "guider": [
+        "63:22",
+        0
+      ],
+      "sampler": [
+        "63:16",
+        0
+      ],
+      "sigmas": [
+        "63:48",
+        0
+      ],
+      "latent_image": [
+        "63:47",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "63:16": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "63:43": {
+    "inputs": {
+      "conditioning": [
+        "63:26",
+        0
+      ],
+      "latent": [
+        "63:44",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参照潜在変数"
+    }
+  },
+  "63:39": {
+    "inputs": {
+      "conditioning": [
+        "63:43",
+        0
+      ],
+      "latent": [
+        "63:40",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参照潜在変数"
+    }
+  },
+  "63:6": {
+    "inputs": {
+      "text": "Apply the design from Reference Image 1 onto objects in Reference Image 2.\n",
+      "clip": [
+        "63:38",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "63:25": {
+    "inputs": {
+      "noise_seed": 120839687766682
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "63:12": {
+    "inputs": {
+      "unet_name": "flux2_dev_fp8mixed.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "63:63": {
+    "inputs": {
+      "lora_name": "Flux2TurboComfyv2.safetensors",
+      "strength_model": 1,
+      "model": [
+        "63:12",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "63:48": {
+    "inputs": {
+      "steps": 8,
+      "width": [
+        "63:65",
+        0
+      ],
+      "height": [
+        "63:65",
+        1
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2Scheduler"
+    }
+  },
+  "63:45": {
+    "inputs": {
+      "upscale_method": "area",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "63:47": {
+    "inputs": {
+      "width": [
+        "63:65",
+        0
+      ],
+      "height": [
+        "63:65",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "Empty Flux 2 Latent"
+    }
+  },
+  "63:65": {
+    "inputs": {
+      "image": [
+        "63:45",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "画像サイズ取得"
+    }
+  },
+  "63:38": {
+    "inputs": {
+      "clip_name": "mistral_3_small_flux2_fp8.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  }
+}

@@ -1,0 +1,904 @@
+{
+  "164": {
+    "inputs": {
+      "file": "concat_20260106_151215.mp4",
+      "video-preview": ""
+    },
+    "class_type": "LoadVideo",
+    "_meta": {
+      "title": "ビデオを読み込む"
+    }
+  },
+  "200": {
+    "inputs": {
+      "image": "flux2_3ref_edit_00048_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "201": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Text Only"
+    }
+  },
+  "263": {
+    "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video-preview": "",
+      "video": [
+        "240:230",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "240:225": {
+    "inputs": {
+      "frame_rate": [
+        "240:233",
+        2
+      ],
+      "positive": [
+        "240:228",
+        0
+      ],
+      "negative": [
+        "240:228",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV条件付け"
+    }
+  },
+  "240:228": {
+    "inputs": {
+      "text": [
+        "240:231",
+        0
+      ],
+      "clip": [
+        "240:237",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Enhanced Prompt (Positive)"
+    }
+  },
+  "240:231": {
+    "inputs": {
+      "switch": [
+        "201",
+        0
+      ],
+      "on_false": [
+        "240:229",
+        0
+      ],
+      "on_true": [
+        "240:235",
+        0
+      ]
+    },
+    "class_type": "InversionDemoLazySwitch",
+    "_meta": {
+      "title": "Bypass Enhancer"
+    }
+  },
+  "240:233": {
+    "inputs": {
+      "video": [
+        "164",
+        0
+      ]
+    },
+    "class_type": "GetVideoComponents",
+    "_meta": {
+      "title": "ビデオコンポーネントの取得"
+    }
+  },
+  "240:235": {
+    "inputs": {
+      "prompt": [
+        "240:229",
+        0
+      ],
+      "system_prompt": "You are a prompt enhancer for a text-to-video model that may be controlled by depth or canny conditioning unknown to you.\n\nYour task is to expand an input caption into a temporally rich, visually expressive video prompt while avoiding any assumptions about scene structure, layout, camera motion, or subject configuration that could contradict an unseen conditioning input.\n\nYou are given:\n\t•\tA text caption describing the scene\n\t•\tNo access to the conditioning input\n\nYou must produce a single continuous paragraph describing how the scene unfolds over time, written to remain compatible with any plausible depth or canny constraint.\n\nCore constraint (highest priority):\n\t•\tStructural agnosticism: Assume that scene geometry, object placement, number of subjects, poses, camera position, and camera motion are fully determined elsewhere. Do NOT invent, alter, or imply any of them.\n\t•\tNo structural commitments: Do NOT add new objects, people, props, architecture, crowd dynamics, entrances/exits, or camera movements unless they are explicitly stated in the input caption.\n\t•\tCamera neutrality: Do NOT specify shot type, framing, or camera motion unless explicitly mentioned in the input caption.\n\t•\tIf unsure, omit: If a description would require assuming unseen structure or motion, leave it out.\n\nGuidelines for enhancement:\n\t•\tFaithful expansion: Enrich the caption without changing its meaning or adding unstated elements.\n\t•\tTemporal dynamics: Focus on timing, continuity, rhythm, and subtle evolution over a few seconds—not new events.\n\t•\tMicro-motion bias: Prefer small, universally compatible motions (breathing, fabric movement, light shifts, ambient motion).\n\t•\tVisual expressiveness (non-structural): You may enhance lighting behavior, color response, surface interaction, atmosphere, and material qualities as long as they do not imply new geometry or layout.\n\t•\tCharacter & action: Describe actions only if explicitly mentioned or safely implied without adding interactions or spatial assumptions.\n\t•\tChronological flow: Use temporal connectors (\"as,\" \"while,\" \"then\") to sequence events.\n\nAudio and dialogue:\n\t•\tAudio layer (always include): Add ambient sounds or music that enhance mood but do NOT imply unseen physical sources, events, or actions. Weave audio naturally into the temporal flow.\n\t•\tDialogue (only if present in input): If dialogue is mentioned, provide exact quoted lines with clear attribution. Specify language or voice traits only if required. Do NOT invent dialogue otherwise.\n\nStyle and realism:\n\t•\tStyle & atmosphere: Artistic tone is allowed only when it does not imply structure, scale, or camera choices.\n\t•\tPhysics realism: Use precise, physically plausible descriptions.\n\t•\tObjective only: Do NOT infer emotions, intentions, or narrative meaning beyond observable motion and sound.\n\t•\tStyle priority: If the user explicitly specifies a visual style (e.g., anime, claymation, watercolor, noir), make that style dominant throughout the prompt. Apply it consistently to lighting, materials, rendering cues, color treatment, and atmosphere, without implying scene structure.\n\nHard constraints:\n\t•\tDo NOT introduce scene cuts, edits, timestamps, or montage language\n\t•\tDo NOT add off-screen events that affect the scene physically\n\t•\tProduce plain prose only\n\nOutput format (strict):\n\t•\tOne continuous paragraph in natural language\n\t•\tNo headings, labels, markdown, code fences, or metadata\n\t•\tAudio must be woven into the paragraph, never separated\n\t•\tMake sure to mention the relevant style if requested, and in that case adjust the entire prompt to match the style, including colors, texture, etc. also start with \"Style: \" and the style name",
+      "max_tokens": 512,
+      "bypass_i2v": true,
+      "seed": 3246421673,
+      "clip": [
+        "240:237",
+        0
+      ]
+    },
+    "class_type": "LTXVGemmaEnhancePrompt",
+    "_meta": {
+      "title": "Enhancer"
+    }
+  },
+  "240:230": {
+    "inputs": {
+      "fps": [
+        "240:233",
+        2
+      ],
+      "images": [
+        "240:239:482",
+        0
+      ],
+      "audio": [
+        "240:239:481",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "動画を作成"
+    }
+  },
+  "240:240": {
+    "inputs": {
+      "filename_prefix": "LTX-2/Video",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "240:230",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "240:229": {
+    "inputs": {
+      "value": "ピクチャ１のニィぐるみが羽子板で羽を突く"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "240:250": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors",
+      "dependencies": [
+        "240:239:593",
+        0
+      ]
+    },
+    "class_type": "LowVRAMCheckpointLoader",
+    "_meta": {
+      "title": "🅛🅣🅧 Low VRAM Checkpoint Loader"
+    }
+  },
+  "240:252": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors",
+      "dependencies": [
+        "240:239:593",
+        0
+      ]
+    },
+    "class_type": "LowVRAMAudioVAELoader",
+    "_meta": {
+      "title": "🅛🅣🅧 Low VRAM Audio VAE Loader"
+    }
+  },
+  "240:232": {
+    "inputs": {
+      "lora_name": "ltx-2-19b-ic-lora-depth-control.safetensors",
+      "strength_model": 1,
+      "model": [
+        "240:250",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "IC LoRA - Depth"
+    }
+  },
+  "240:237": {
+    "inputs": {
+      "gemma_path": "gemma-3-12b-it-qat-q4_0-unquantized/model-00001-of-00005.safetensors",
+      "ltxv_path": "ltx-2-19b-distilled-fp8.safetensors",
+      "max_length": 1024
+    },
+    "class_type": "LTXVGemmaCLIPModelLoader",
+    "_meta": {
+      "title": "🅛🅣🅧 Gemma 3 Model Loader"
+    }
+  },
+  "240:251": {
+    "inputs": {
+      "model_name": "ltx-2-spatial-upscaler-x2-1.0.safetensors",
+      "dependencies": [
+        "240:239:593",
+        0
+      ]
+    },
+    "class_type": "LowVRAMLatentUpscaleModelLoader",
+    "_meta": {
+      "title": "Low VRAMLoad Latent Upscale Model"
+    }
+  },
+  "240:239:472": {
+    "inputs": {
+      "positive": [
+        "240:239:485",
+        0
+      ],
+      "negative": [
+        "240:239:485",
+        1
+      ],
+      "latent": [
+        "240:239:471",
+        0
+      ]
+    },
+    "class_type": "LTXVCropGuides",
+    "_meta": {
+      "title": "LTXVCropGuides"
+    }
+  },
+  "240:239:486": {
+    "inputs": {
+      "av_latent": [
+        "240:239:479",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "240:239:462": {
+    "inputs": {
+      "noise": [
+        "240:239:461",
+        0
+      ],
+      "guider": [
+        "240:239:501",
+        0
+      ],
+      "sampler": [
+        "240:239:477",
+        0
+      ],
+      "sigmas": [
+        "240:239:515",
+        0
+      ],
+      "latent_image": [
+        "240:239:468",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "240:239:485": {
+    "inputs": {
+      "frame_idx": 0,
+      "strength": 1,
+      "positive": [
+        "240:239:632",
+        0
+      ],
+      "negative": [
+        "240:225",
+        1
+      ],
+      "vae": [
+        "240:250",
+        2
+      ],
+      "latent": [
+        "240:239:624",
+        0
+      ],
+      "image": [
+        "240:239:593",
+        0
+      ]
+    },
+    "class_type": "LTXVAddGuide",
+    "_meta": {
+      "title": "LTXVAddGuide"
+    }
+  },
+  "240:239:490": {
+    "inputs": {
+      "video_latent": [
+        "240:239:623",
+        0
+      ],
+      "audio_latent": [
+        "240:239:489",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "240:239:501": {
+    "inputs": {
+      "model": [
+        "240:232",
+        0
+      ],
+      "conditioning": [
+        "240:239:485",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本ガイダー"
+    }
+  },
+  "240:239:477": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "240:239:502": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "240:239:478": {
+    "inputs": {
+      "model": [
+        "240:250",
+        0
+      ],
+      "conditioning": [
+        "240:239:487",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本ガイダー"
+    }
+  },
+  "240:239:479": {
+    "inputs": {
+      "noise": [
+        "240:239:480",
+        0
+      ],
+      "guider": [
+        "240:239:478",
+        0
+      ],
+      "sampler": [
+        "240:239:502",
+        0
+      ],
+      "sigmas": [
+        "240:239:516",
+        0
+      ],
+      "latent_image": [
+        "240:239:490",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "240:239:468": {
+    "inputs": {
+      "video_latent": [
+        "240:239:485",
+        2
+      ],
+      "audio_latent": [
+        "240:239:583",
+        0
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "240:239:511": {
+    "inputs": {
+      "enable_model_cpu_offload": true,
+      "enable_sequential_cpu_offload": false
+    },
+    "class_type": "DownloadAndLoadDepthCrafterModel",
+    "_meta": {
+      "title": "DownloadAndLoadDepthCrafterModel"
+    }
+  },
+  "240:239:515": {
+    "inputs": {
+      "sigmas": "1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "240:239:516": {
+    "inputs": {
+      "sigmas": "0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "240:239:489": {
+    "inputs": {
+      "av_latent": [
+        "240:239:487",
+        2
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "240:239:480": {
+    "inputs": {
+      "noise_seed": 420
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "240:239:461": {
+    "inputs": {
+      "noise_seed": 42
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "240:239:482": {
+    "inputs": {
+      "spatial_tiles": 4,
+      "spatial_overlap": 4,
+      "temporal_tile_length": 16,
+      "temporal_overlap": 4,
+      "last_frame_fix": false,
+      "working_device": "auto",
+      "working_dtype": "auto",
+      "vae": [
+        "240:250",
+        2
+      ],
+      "latents": [
+        "240:239:486",
+        0
+      ]
+    },
+    "class_type": "LTXVSpatioTemporalTiledVAEDecode",
+    "_meta": {
+      "title": "🅛🅣🅧 LTXV Spatio Temporal Tiled VAE Decode"
+    }
+  },
+  "240:239:584": {
+    "inputs": {
+      "a": 24
+    },
+    "class_type": "CM_FloatToInt",
+    "_meta": {
+      "title": "FloatToInt"
+    }
+  },
+  "240:239:583": {
+    "inputs": {
+      "frames_number": [
+        "240:239:589",
+        2
+      ],
+      "frame_rate": [
+        "240:239:584",
+        0
+      ],
+      "batch_size": 1,
+      "audio_vae": [
+        "240:252",
+        0
+      ]
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": {
+      "title": "LTXV Empty Latent Audio"
+    }
+  },
+  "240:239:585": {
+    "inputs": {
+      "width": [
+        "240:239:589",
+        0
+      ],
+      "height": [
+        "240:239:589",
+        1
+      ],
+      "length": [
+        "240:239:589",
+        2
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLTXVLatentVideo",
+    "_meta": {
+      "title": "空のLTXV潜在ビデオ"
+    }
+  },
+  "240:239:508": {
+    "inputs": {
+      "force_size": 512,
+      "num_inference_steps": 5,
+      "guidance_scale": 1,
+      "window_size": 110,
+      "overlap": 25,
+      "depthcrafter_model": [
+        "240:239:511",
+        0
+      ],
+      "images": [
+        "240:239:587",
+        0
+      ]
+    },
+    "class_type": "DepthCrafter",
+    "_meta": {
+      "title": "DepthCrafter"
+    }
+  },
+  "240:239:590": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "width": 1920,
+      "height": 1088,
+      "crop": "center",
+      "image": [
+        "240:239:632",
+        1
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Upscale Video to User Size"
+    }
+  },
+  "240:239:588": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "width": [
+        "240:239:591",
+        0
+      ],
+      "height": [
+        "240:239:591",
+        1
+      ],
+      "crop": "disabled",
+      "image": [
+        "200",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Upscale FF to Video Size"
+    }
+  },
+  "240:239:589": {
+    "inputs": {
+      "image": [
+        "240:239:587",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Get Info for Stage 1"
+    }
+  },
+  "240:239:586": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "width": [
+        "240:239:589",
+        0
+      ],
+      "height": [
+        "240:239:589",
+        1
+      ],
+      "crop": "center",
+      "image": [
+        "240:239:588",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Upscale FF to Stage 1"
+    }
+  },
+  "240:239:592": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "width": 1920,
+      "height": 1088,
+      "crop": "center",
+      "image": [
+        "240:239:588",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Upscale FF to Stage 2"
+    }
+  },
+  "240:239:481": {
+    "inputs": {
+      "samples": [
+        "240:239:486",
+        1
+      ],
+      "audio_vae": [
+        "240:252",
+        0
+      ]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": {
+      "title": "LTXV Audio VAE Decode"
+    }
+  },
+  "240:239:623": {
+    "inputs": {
+      "strength": 1,
+      "bypass": [
+        "201",
+        0
+      ],
+      "vae": [
+        "240:250",
+        2
+      ],
+      "image": [
+        "240:239:592",
+        0
+      ],
+      "latent": [
+        "240:239:489",
+        0
+      ]
+    },
+    "class_type": "LTXVImgToVideoInplace",
+    "_meta": {
+      "title": "LTXVImgToVideoInplace"
+    }
+  },
+  "240:239:625": {
+    "inputs": {
+      "samples": [
+        "240:239:472",
+        2
+      ],
+      "upscale_model": [
+        "240:251",
+        0
+      ],
+      "vae": [
+        "240:250",
+        2
+      ]
+    },
+    "class_type": "LTXVLatentUpsampler",
+    "_meta": {
+      "title": "LTXVLatentUpsampler"
+    }
+  },
+  "240:239:487": {
+    "inputs": {
+      "start_time": 0,
+      "end_time": 100,
+      "video_fps": [
+        "240:233",
+        2
+      ],
+      "mask_video": true,
+      "mask_audio": false,
+      "mask_init_value_video": 0,
+      "mask_init_value_audio": 0,
+      "slope_len": 93,
+      "av_latent": [
+        "240:239:474",
+        0
+      ],
+      "positive": [
+        "240:239:472",
+        0
+      ],
+      "negative": [
+        "240:239:472",
+        1
+      ],
+      "model": [
+        "240:250",
+        0
+      ],
+      "vae": [
+        "240:250",
+        2
+      ],
+      "audio_vae": [
+        "240:252",
+        0
+      ]
+    },
+    "class_type": "LTXVSetAudioVideoMaskByTime",
+    "_meta": {
+      "title": "🅛🅣🅧 LTXV Set Audio Video Mask By Time"
+    }
+  },
+  "240:239:474": {
+    "inputs": {
+      "video_latent": [
+        "240:239:625",
+        0
+      ],
+      "audio_latent": [
+        "240:239:471",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "240:239:471": {
+    "inputs": {
+      "av_latent": [
+        "240:239:462",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "240:239:624": {
+    "inputs": {
+      "strength": 1,
+      "bypass": [
+        "201",
+        0
+      ],
+      "vae": [
+        "240:250",
+        2
+      ],
+      "image": [
+        "240:239:586",
+        0
+      ],
+      "latent": [
+        "240:239:585",
+        0
+      ]
+    },
+    "class_type": "LTXVImgToVideoInplace",
+    "_meta": {
+      "title": "LTXVImgToVideoInplace"
+    }
+  },
+  "240:239:593": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "width": [
+        "240:239:591",
+        0
+      ],
+      "height": [
+        "240:239:591",
+        1
+      ],
+      "crop": "disabled",
+      "image": [
+        "240:239:508",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Upscale Depth to video size"
+    }
+  },
+  "240:239:591": {
+    "inputs": {
+      "image": [
+        "240:239:632",
+        1
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "Get Video Info"
+    }
+  },
+  "240:239:632": {
+    "inputs": {
+      "signal": [
+        "240:225",
+        0
+      ],
+      "value": [
+        "240:233",
+        0
+      ]
+    },
+    "class_type": "ImpactExecutionOrderController",
+    "_meta": {
+      "title": "Execution Order Controller"
+    }
+  },
+  "240:239:587": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "scale_by": 0.5,
+      "image": [
+        "240:239:590",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "Upscale Video to Stage 1"
+    }
+  }
+}

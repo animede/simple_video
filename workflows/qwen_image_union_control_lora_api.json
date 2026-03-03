@@ -1,0 +1,255 @@
+{
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": " ",
+      "clip": [
+        "38",
+        0
+      ]
+    }
+  },
+  "73": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "ComfyUI_00752_.png"
+    }
+  },
+  "74": {
+    "class_type": "Canny",
+    "inputs": {
+      "image": [
+        "77",
+        0
+      ],
+      "low_threshold": 0.1,
+      "high_threshold": 0.4
+    }
+  },
+  "78": {
+    "class_type": "DepthAnythingV2Preprocessor",
+    "inputs": {
+      "image": [
+        "77",
+        0
+      ],
+      "ckpt_name": "depth_anything_v2_vitl.pth",
+      "resolution": 512
+    }
+  },
+  "79": {
+    "class_type": "HEDPreprocessor",
+    "inputs": {
+      "image": [
+        "77",
+        0
+      ],
+      "safe": "enable",
+      "resolution": 512
+    }
+  },
+  "80": {
+    "class_type": "LineArtPreprocessor",
+    "inputs": {
+      "image": [
+        "77",
+        0
+      ],
+      "coarse": "disable",
+      "resolution": 512
+    }
+  },
+  "81": {
+    "class_type": "OpenposePreprocessor",
+    "inputs": {
+      "image": [
+        "77",
+        0
+      ],
+      "detect_hand": "enable",
+      "detect_body": "enable",
+      "detect_face": "enable",
+      "resolution": 512
+    }
+  },
+  "84": {
+    "class_type": "ImageBlur",
+    "_meta": {
+      "title": "LowQuality Preprocessor (blur)"
+    },
+    "inputs": {
+      "image": [
+        "77",
+        0
+      ],
+      "blur_radius": 5,
+      "sigma": 2.0
+    }
+  },
+  "75": {
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Preprocessor Preview"
+    },
+    "inputs": {
+      "images": [
+        "74",
+        0
+      ],
+      "filename_prefix": "temp/controlnet_preview"
+    }
+  },
+  "70": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "72",
+        0
+      ]
+    }
+  },
+  "71": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "7",
+        0
+      ],
+      "latent": [
+        "72",
+        0
+      ]
+    }
+  },
+  "72": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "74",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    }
+  },
+  "39": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "38": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "69": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "37",
+        0
+      ],
+      "lora_name": "qwen_image_union_diffsynth_lora.safetensors",
+      "strength_model": 1.0
+    }
+  },
+  "37": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "77": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "image": [
+        "73",
+        0
+      ],
+      "upscale_method": "bilinear",
+      "megapixels": 1.0,
+      "resolution_steps": 64
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "66",
+        0
+      ],
+      "seed": 753030706,
+      "steps": 20,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "70",
+        0
+      ],
+      "negative": [
+        "71",
+        0
+      ],
+      "latent_image": [
+        "72",
+        0
+      ],
+      "denoise": 1.0
+    }
+  },
+  "60": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "image/qwen_image_union_control_lora"
+    }
+  },
+  "66": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "69",
+        0
+      ],
+      "shift": 1.73
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "Extreme close-up shot, realistic digital illustration, close eyes, peaceful,oil painting with thick application, girl with curly hair, large black flower, black nail polish, ring details, soft light and shadow, dark green backdrop, delicate hair texture, smooth skin rendering, fine artistic details, dreamy and elegant atmosphere, dark style, grotesque. White hair, huge black flower behind her (with yellow stamens, green stems and leaves), black turtleneck clothing, green leaves and black flowers around, artistic illustration style, sharp color contrast, mysterious atmosphere, delicate brushstrokes, thick oil painting, thickly applied oil painting, the whole picture is filled with layered flowers, huge, petals spreading, beautiful composition, unexpected angle, layered background. Macro, eyes looking down, thick application, brushstrokes, splatters, mottled, old, extremely romantic, light and shadow, strong contrast, maximalist style, full-frame composition.",
+      "clip": [
+        "38",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    }
+  }
+}

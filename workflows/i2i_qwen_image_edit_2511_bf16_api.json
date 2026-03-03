@@ -1,0 +1,212 @@
+{
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "65",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "12": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_edit_2511_bf16.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "41": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.jpg",
+      "upload": "image"
+    }
+  },
+  "61": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "64": {
+    "class_type": "CFGNorm",
+    "inputs": {
+      "model": [
+        "67",
+        0
+      ],
+      "strength": 1
+    }
+  },
+  "65": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "64",
+        0
+      ],
+      "positive": [
+        "70",
+        0
+      ],
+      "negative": [
+        "71",
+        0
+      ],
+      "latent_image": [
+        "75",
+        0
+      ],
+      "seed": 123456,
+      "control_after_generate": "randomize",
+      "steps": 20,
+      "cfg": 4,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1
+    }
+  },
+  "67": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "12",
+        0
+      ],
+      "shift": 3.1
+    }
+  },
+  "68": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "61",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ],
+      "image1": [
+        "79",
+        0
+      ],
+      "image2": [
+        "83",
+        0
+      ],
+      "image3": [
+        "87",
+        0
+      ],
+      "prompt": ""
+    }
+  },
+  "69": {
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "inputs": {
+      "clip": [
+        "61",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ],
+      "image1": [
+        "79",
+        0
+      ],
+      "image2": [
+        "83",
+        0
+      ],
+      "image3": [
+        "87",
+        0
+      ],
+      "prompt": ""
+    }
+  },
+  "70": {
+    "class_type": "FluxKontextMultiReferenceLatentMethod",
+    "inputs": {
+      "conditioning": [
+        "68",
+        0
+      ],
+      "reference_latents_method": "index_timestep_zero"
+    }
+  },
+  "71": {
+    "class_type": "FluxKontextMultiReferenceLatentMethod",
+    "inputs": {
+      "conditioning": [
+        "69",
+        0
+      ],
+      "reference_latents_method": "index_timestep_zero"
+    }
+  },
+  "75": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "79",
+        0
+      ],
+      "vae": [
+        "10",
+        0
+      ]
+    }
+  },
+  "79": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "image": [
+        "41",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "megapixels": 1.6,
+      "resolution_steps": 64
+    }
+  },
+  "83": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.jpg",
+      "upload": "image"
+    }
+  },
+  "87": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "input.jpg",
+      "upload": "image"
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "image/i2i_qwen_2511_bf16",
+      "images": [
+        "8",
+        0
+      ]
+    }
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "14": {
+    "inputs": {
+      "image": "i2i_qwen_fp8_lightning4_00468_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "18": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "17:12",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "画像を保存"
+    }
+  },
+  "17:1": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  },
+  "17:2": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "17:4": {
+    "inputs": {
+      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "17:9": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "17:1",
+        0
+      ],
+      "vae": [
+        "17:2",
+        0
+      ],
+      "image1": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "17:3": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Edit-2509-Anything2RealAlpha.safetensors",
+      "strength_model": 1,
+      "model": [
+        "17:4",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "17:12": {
+    "inputs": {
+      "samples": [
+        "17:11",
+        0
+      ],
+      "vae": [
+        "17:2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "17:10": {
+    "inputs": {
+      "pixels": [
+        "14",
+        0
+      ],
+      "vae": [
+        "17:2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "17:6": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "17:5",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "17:7": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "17:6",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "17:5": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Edit-2509-Lightning-8steps-V1.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "17:3",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "17:11": {
+    "inputs": {
+      "seed": 683268904502527,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "beta",
+      "denoise": 1,
+      "model": [
+        "17:7",
+        0
+      ],
+      "positive": [
+        "17:8",
+        0
+      ],
+      "negative": [
+        "17:9",
+        0
+      ],
+      "latent_image": [
+        "17:10",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "17:8": {
+    "inputs": {
+      "prompt": "change image 1 to realistic photograph",
+      "clip": [
+        "17:1",
+        0
+      ],
+      "vae": [
+        "17:2",
+        0
+      ],
+      "image1": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  }
+}

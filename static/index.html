@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Video App</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="css/style.css?v=20260219a" />
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      height: auto !important;
+      overflow-y: auto !important;
+      overflow-x: hidden;
+    }
+    .app-shell { min-height: 100vh; background: #111; }
+    .simple-video-mode { display: flex !important; flex-direction: column !important; min-height: 100vh; }
+    .simple-video-content { min-height: calc(100vh - 56px); }
+    .toast { z-index: 9999; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="simple-video-mode" id="simpleVideoRoot">
+      <div class="simple-video-topbar" id="simpleVideoTopbar">
+        <h2 class="simple-video-title">🎬 かんたん動画（Standalone）</h2>
+        <div class="simple-video-topbar-actions" id="simpleVideoTopbarActions">
+          <button class="simple-video-back-btn" id="simpleVideoFilesBtn" type="button">📁 Files</button>
+          <button class="simple-video-back-btn" id="simpleVideoHelpBtn" type="button">❓ Help</button>
+          <button class="simple-video-back-btn" id="simpleVideoBackBtn" type="button">🏠 Home</button>
+        </div>
+      </div>
+      <div class="simple-video-content" id="simpleVideoContent">
+        <div class="simple-video-left" id="simpleVideoLeft">
+          <div class="sv-loading">🎬 かんたん動画 UI 読み込み中...</div>
+        </div>
+        <div class="simple-video-right" id="simpleVideoRight">
+          <div class="sv-loading">🎬 かんたん動画 UI 読み込み中...</div>
+        </div>
+      </div>
+    </div>
+    <div id="simpleVideoBackgroundCards" style="display:none; position:absolute; left:-9999px;"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="floating-guide-panel" id="floatingGuidePanel">
+    <div class="floating-guide-header" id="floatingGuideHeader">
+      <span class="floating-guide-title">❓ かんたん動画 Help</span>
+      <div class="floating-guide-controls">
+        <button class="floating-guide-minimize" id="floatingGuideMinimize" title="最小化">─</button>
+        <button class="floating-guide-close" id="floatingGuideClose" title="閉じる">&times;</button>
+      </div>
+    </div>
+    <div class="floating-guide-tabs" id="floatingGuideTabs">
+      <button class="floating-guide-tab active" data-doc-key="tutorial" type="button">クイックヘルプ</button>
+      <button class="floating-guide-tab" data-doc-key="guide" type="button">ユーザーズガイド</button>
+      <button class="floating-guide-tab" data-doc-key="technical" type="button">テクニカルガイド</button>
+    </div>
+    <div class="floating-guide-body" id="floatingGuideBody">
+      <div class="floating-guide-loading">読み込み中...</div>
+    </div>
+    <div class="floating-guide-resize-handle"></div>
+  </div>
+
+  <div class="output-browser-modal" id="outputBrowserModal">
+    <div class="output-browser-backdrop"></div>
+    <div class="output-browser-content">
+      <div class="output-browser-header">
+        <h2>📁 Files</h2>
+        <div class="output-browser-controls">
+          <select id="outputFilterType" class="output-filter-select" title="種類フィルタ">
+            <option value="all">All</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="movie">Music Video</option>
+            <option value="audio">Audio</option>
+          </select>
+          <select id="outputSortBy" class="output-filter-select" title="並び替え">
+            <option value="mtime">Date</option>
+            <option value="name">Name</option>
+            <option value="size">Size</option>
+          </select>
+          <select id="outputSortOrder" class="output-filter-select" title="順序">
+            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+          </select>
+          <button class="simple-video-icon-btn" id="outputRefreshBtn" type="button" title="更新">🔄</button>
+          <button class="output-browser-close" id="outputBrowserClose" type="button" title="閉じる">&times;</button>
+        </div>
+      </div>
+      <div class="output-browser-actions">
+        <span id="outputFileCount">0 files</span>
+        <span id="outputSelectedCount" style="display:none;">Selected: <span id="selectedNum">0</span></span>
+        <button class="simple-video-settings-btn simple-video-inline-btn" id="selectAllBtn" type="button">Select All</button>
+        <button class="simple-video-settings-btn simple-video-inline-btn" id="deselectAllBtn" type="button" style="display:none;">Deselect</button>
+        <button class="btn-danger" id="deleteSelectedBtn" type="button" style="display:none;">Delete</button>
+      </div>
+      <div class="output-browser-body" id="outputBrowserBody"></div>
+    </div>
+  </div>
+
+  <script src="js/api.js?v=20260226f"></script>
+  <script src="js/simple_video_config.js?v=20260219a"></script>
+  <script src="js/simple_video.js?v=20260226n"></script>
+  <script src="js/bootstrap.js?v=20260226b"></script>
+</body>
+</html>

@@ -1,0 +1,546 @@
+{
+  "5075": {
+    "inputs": {
+      "filename_prefix": "video/LTX-2",
+      "format": "auto",
+      "codec": "auto",
+      "video-preview": "",
+      "video": [
+        "5229",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "5217": {
+    "inputs": {
+      "width": 1920,
+      "height": 1088,
+      "batch_size": 1,
+      "color": 0
+    },
+    "class_type": "EmptyImage",
+    "_meta": {
+      "title": "空の画像"
+    }
+  },
+  "5218": {
+    "inputs": {
+      "value": 121
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "length"
+    }
+  },
+  "5219": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors"
+    },
+    "class_type": "LTXVAudioVAELoader",
+    "_meta": {
+      "title": "LTXV Audio VAE Loader"
+    }
+  },
+  "5220": {
+    "inputs": {
+      "a": [
+        "5221",
+        0
+      ]
+    },
+    "class_type": "CM_FloatToInt",
+    "_meta": {
+      "title": "Frame Rate"
+    }
+  },
+  "5221": {
+    "inputs": {
+      "value": 24
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Frame Rate"
+    }
+  },
+  "5222": {
+    "inputs": {
+      "value": "cinematic epic war movie scene shows a medium closeup shot of a fierce muscular Viking warrior standing in place, clad in weathered leather armor and gripping a battle-worn axe, his long, tangled hair billowing against the stormy sky. The scene is set under a foreboding, cloud-heavy sky, casting an eerie, dim light that reflects off his glinting axe. we hear him roar: \"prepare for battle, and eternal glory!\". the camera slowly zooms in on his determined face"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "5223": {
+    "inputs": {
+      "text": [
+        "5225",
+        0
+      ],
+      "clip": [
+        "5227",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Enhanced Prompt (Positive)"
+    }
+  },
+  "5224": {
+    "inputs": {
+      "frame_rate": [
+        "5221",
+        0
+      ],
+      "positive": [
+        "5223",
+        0
+      ],
+      "negative": [
+        "5223",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV条件付け"
+    }
+  },
+  "5225": {
+    "inputs": {
+      "prompt": [
+        "5222",
+        0
+      ],
+      "system_prompt": "You are a Creative Assistant. Given a user's raw input prompt describing a scene or concept, expand it into a detailed video generation prompt with specific visuals and integrated audio to guide a text-to-video model.\n\n#### Guidelines\n- Strictly follow all aspects of the user's raw input: include every element requested (style, visuals, motions, actions, camera movement, audio).\n    - If the input is vague, invent concrete details: lighting, textures, materials, scene settings, etc.\n        - For characters: describe gender, clothing, hair, expressions. DO NOT invent unrequested characters.\n- Use active language: present-progressive verbs (\"is walking,\" \"speaking\"). If no action specified, describe natural movements.\n- Maintain chronological flow: use temporal connectors (\"as,\" \"then,\" \"while\").\n- Audio layer: Describe complete soundscape (background audio, ambient sounds, SFX, speech/music when requested). Integrate sounds chronologically alongside actions. Be specific (e.g., \"soft footsteps on tile\"), not vague (e.g., \"ambient sound is present\").\n- Speech (only when requested): \n    - For ANY speech-related input (talking, conversation, singing, etc.), ALWAYS include exact words in quotes with voice characteristics (e.g., \"The man says in an excited voice: 'You won't believe what I just saw!'\").\n    - Specify language if not English and accent if relevant.\n- Style: Include visual style at the beginning: \"Style: <style>, <rest of prompt>.\" Default to cinematic-realistic if unspecified. Omit if unclear.\n- Visual and audio only: NO non-visual/auditory senses (smell, taste, touch).\n- Restrained language: Avoid dramatic/exaggerated terms. Use mild, natural phrasing.\n    - Colors: Use plain terms (\"red dress\"), not intensified (\"vibrant blue,\" \"bright red\").\n    - Lighting: Use neutral descriptions (\"soft overhead light\"), not harsh (\"blinding light\").\n    - Facial features: Use delicate modifiers for subtle features (i.e., \"subtle freckles\").\n\n#### Important notes: \n- Analyze the user's raw input carefully. In cases of FPV or POV, exclude the description of the subject whose POV is requested.\n- Camera motion: DO NOT invent camera motion unless requested by the user.\n- Speech: DO NOT modify user-provided character dialogue unless it's a typo.\n- No timestamps or cuts: DO NOT use timestamps or describe scene cuts unless explicitly requested.\n- Format: DO NOT use phrases like \"The scene opens with...\". Start directly with Style (optional) and chronological scene description.\n- Format: DO NOT start your response with special characters.\n- DO NOT invent dialogue unless the user mentions speech/talking/singing/conversation.\n- If the user's raw input prompt is highly detailed, chronological and in the requested format: DO NOT make major edits or introduce new elements. Add/enhance audio descriptions if missing.\n\n#### Output Format (Strict):\n- Single continuous paragraph in natural language (English).\n- NO titles, headings, prefaces, code fences, or Markdown.\n- If unsafe/invalid, return original user prompt. Never ask questions or clarifications.\n\nYour output quality is CRITICAL. Generate visually rich, dynamic prompts with integrated audio for high-quality video generation.\n\n#### Example\nInput: \"A woman at a coffee shop talking on the phone\"\nOutput:\nStyle: realistic with cinematic lighting. In a medium close-up, a woman in her early 30s with shoulder-length brown hair sits at a small wooden table by the window. She wears a cream-colored turtleneck sweater, holding a white ceramic coffee cup in one hand and a smartphone to her ear with the other. Ambient cafe sounds fill the space—espresso machine hiss, quiet conversations, gentle clinking of cups. The woman listens intently, nodding slightly, then takes a sip of her coffee and sets it down with a soft clink. Her face brightens into a warm smile as she speaks in a clear, friendly voice, 'That sounds perfect! I'd love to meet up this weekend. How about Saturday afternoon?' She laughs softly—a genuine chuckle—and shifts in her chair. Behind her, other patrons move subtly in and out of focus. 'Great, I'll see you then,' she concludes cheerfully, lowering the phone.",
+      "max_tokens": 512,
+      "bypass_i2v": true,
+      "seed": 3544194775,
+      "clip": [
+        "5227",
+        0
+      ]
+    },
+    "class_type": "LTXVGemmaEnhancePrompt",
+    "_meta": {
+      "title": "Enhancer"
+    }
+  },
+  "5227": {
+    "inputs": {
+      "gemma_path": "gemma-3-12b-it-qat-q4_0-unquantized/model-00001-of-00005.safetensors",
+      "ltxv_path": "ltx-2-19b-distilled-fp8.safetensors",
+      "max_length": 1024
+    },
+    "class_type": "LTXVGemmaCLIPModelLoader",
+    "_meta": {
+      "title": "🅛🅣🅧 Gemma 3 Model Loader"
+    }
+  },
+  "5228": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-distilled-fp8.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "チェックポイントを読み込む"
+    }
+  },
+  "5229": {
+    "inputs": {
+      "fps": [
+        "5221",
+        0
+      ],
+      "images": [
+        "5232:5185",
+        0
+      ],
+      "audio": [
+        "5232:5169",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "動画を作成"
+    }
+  },
+  "5230": {
+    "inputs": {
+      "lora_name": "ltx-2-19b-lora-camera-control-dolly-left.safetensors",
+      "strength_model": 1,
+      "model": [
+        "5228",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "5231": {
+    "inputs": {
+      "lora_name": "ltx-2-19b-lora-camera-control-dolly-right.safetensors",
+      "strength_model": 1,
+      "model": [
+        "5228",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "5244": {
+    "inputs": {
+      "model_name": "ltx-2-spatial-upscaler-x2-1.0.safetensors"
+    },
+    "class_type": "LatentUpscaleModelLoader",
+    "_meta": {
+      "title": "Load Latent Upscale Model"
+    }
+  },
+  "5232:5155": {
+    "inputs": {
+      "noise": [
+        "5232:5154",
+        0
+      ],
+      "guider": [
+        "5232:5171",
+        0
+      ],
+      "sampler": [
+        "5232:5152",
+        0
+      ],
+      "sigmas": [
+        "5232:5183",
+        0
+      ],
+      "latent_image": [
+        "5232:5160",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "5232:5156": {
+    "inputs": {
+      "av_latent": [
+        "5232:5155",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "5232:5162": {
+    "inputs": {
+      "video_latent": [
+        "5232:5163",
+        0
+      ],
+      "audio_latent": [
+        "5232:5170",
+        0
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "5232:5170": {
+    "inputs": {
+      "frames_number": [
+        "5218",
+        0
+      ],
+      "frame_rate": [
+        "5220",
+        0
+      ],
+      "batch_size": 1,
+      "audio_vae": [
+        "5219",
+        0
+      ]
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": {
+      "title": "LTXV Empty Latent Audio"
+    }
+  },
+  "5232:5163": {
+    "inputs": {
+      "width": [
+        "5232:5165",
+        0
+      ],
+      "height": [
+        "5232:5165",
+        1
+      ],
+      "length": [
+        "5218",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLTXVLatentVideo",
+    "_meta": {
+      "title": "空のLTXV潜在ビデオ"
+    }
+  },
+  "5232:5150": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "5232:5152": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "5232:5159": {
+    "inputs": {
+      "noise": [
+        "5232:5158",
+        0
+      ],
+      "guider": [
+        "5232:5151",
+        0
+      ],
+      "sampler": [
+        "5232:5150",
+        0
+      ],
+      "sigmas": [
+        "5232:5182",
+        0
+      ],
+      "latent_image": [
+        "5232:5162",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "5232:5151": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "5230",
+        0
+      ],
+      "positive": [
+        "5224",
+        0
+      ],
+      "negative": [
+        "5224",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGガイダー"
+    }
+  },
+  "5232:5182": {
+    "inputs": {
+      "sigmas": "1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "5232:5183": {
+    "inputs": {
+      "sigmas": "0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "5232:5158": {
+    "inputs": {
+      "noise_seed": 45
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "5232:5154": {
+    "inputs": {
+      "noise_seed": 420
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "5232:5160": {
+    "inputs": {
+      "video_latent": [
+        "5232:5187",
+        0
+      ],
+      "audio_latent": [
+        "5232:5167",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "5232:5171": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "5231",
+        0
+      ],
+      "positive": [
+        "5224",
+        0
+      ],
+      "negative": [
+        "5224",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGガイダー"
+    }
+  },
+  "5232:5169": {
+    "inputs": {
+      "samples": [
+        "5232:5156",
+        1
+      ],
+      "audio_vae": [
+        "5219",
+        0
+      ]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": {
+      "title": "LTXV Audio VAE Decode"
+    }
+  },
+  "5232:5164": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "scale_by": 0.5,
+      "image": [
+        "5217",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "画像を拡大（指定サイズ）"
+    }
+  },
+  "5232:5165": {
+    "inputs": {
+      "image": [
+        "5232:5164",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "画像サイズ取得"
+    }
+  },
+  "5232:5185": {
+    "inputs": {
+      "spatial_tiles": 4,
+      "spatial_overlap": 4,
+      "temporal_tile_length": 16,
+      "temporal_overlap": 4,
+      "last_frame_fix": false,
+      "working_device": "auto",
+      "working_dtype": "auto",
+      "vae": [
+        "5228",
+        2
+      ],
+      "latents": [
+        "5232:5156",
+        0
+      ]
+    },
+    "class_type": "LTXVSpatioTemporalTiledVAEDecode",
+    "_meta": {
+      "title": "🅛🅣🅧 LTXV Spatio Temporal Tiled VAE Decode"
+    }
+  },
+  "5232:5167": {
+    "inputs": {
+      "av_latent": [
+        "5232:5159",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "5232:5187": {
+    "inputs": {
+      "samples": [
+        "5232:5167",
+        0
+      ],
+      "upscale_model": [
+        "5244",
+        0
+      ],
+      "vae": [
+        "5228",
+        2
+      ]
+    },
+    "class_type": "LTXVLatentUpsampler",
+    "_meta": {
+      "title": "LTXVLatentUpsampler"
+    }
+  }
+}

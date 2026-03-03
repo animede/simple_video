@@ -1,0 +1,925 @@
+{
+  "144": {
+    "inputs": {
+      "video": [
+        "183",
+        0
+      ]
+    },
+    "class_type": "GetVideoComponents",
+    "_meta": {
+      "title": "ビデオコンポーネントの取得"
+    }
+  },
+  "146": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "scale_by": 0.5,
+      "image": [
+        "164",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "画像を拡大（指定サイズ）"
+    }
+  },
+  "152": {
+    "inputs": {
+      "batch_index": 0,
+      "length": [
+        "168",
+        0
+      ],
+      "image": [
+        "144",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "バッチから画像を取得"
+    }
+  },
+  "158": {
+    "inputs": {
+      "low_threshold": 0.4,
+      "high_threshold": 0.8,
+      "image": [
+        "146",
+        0
+      ]
+    },
+    "class_type": "Canny",
+    "_meta": {
+      "title": "キャニー"
+    }
+  },
+  "160": {
+    "inputs": {
+      "image": "ComfyUI_00184_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "164": {
+    "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": [
+        "166",
+        0
+      ],
+      "resize_type.height": [
+        "167",
+        0
+      ],
+      "resize_type.crop": "center",
+      "scale_method": "lanczos",
+      "input": [
+        "152",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "Resize Image/Mask"
+    }
+  },
+  "165": {
+    "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": [
+        "166",
+        0
+      ],
+      "resize_type.height": [
+        "167",
+        0
+      ],
+      "resize_type.crop": "center",
+      "scale_method": "lanczos",
+      "input": [
+        "160",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "Resize Image/Mask"
+    }
+  },
+  "166": {
+    "inputs": {
+      "value": 1280
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Width"
+    }
+  },
+  "167": {
+    "inputs": {
+      "value": 720
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "height"
+    }
+  },
+  "168": {
+    "inputs": {
+      "value": 121
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Frame Count"
+    }
+  },
+  "169": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Ignore First Frame?"
+    }
+  },
+  "175": {
+    "inputs": {
+      "filename_prefix": "video/LTX_2.0",
+      "format": "auto",
+      "codec": "auto",
+      "video-preview": "",
+      "video": [
+        "143:106",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "183": {
+    "inputs": {
+      "file": "concat_20251230_225455.mp4",
+      "video-preview": ""
+    },
+    "class_type": "LoadVideo",
+    "_meta": {
+      "title": "ビデオを読み込む"
+    }
+  },
+  "181:8": {
+    "inputs": {
+      "samples": [
+        "181:16",
+        0
+      ],
+      "vae": [
+        "181:14",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "181:10": {
+    "inputs": {
+      "unet_name": "lotus-depth-d-v1-1.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "181:14": {
+    "inputs": {
+      "vae_name": "vae-ft-mse-840000-ema-pruned.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "181:16": {
+    "inputs": {
+      "noise": [
+        "181:18",
+        0
+      ],
+      "guider": [
+        "181:19",
+        0
+      ],
+      "sampler": [
+        "181:21",
+        0
+      ],
+      "sigmas": [
+        "181:28",
+        0
+      ],
+      "latent_image": [
+        "181:23",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "181:18": {
+    "inputs": {},
+    "class_type": "DisableNoise",
+    "_meta": {
+      "title": "ノイズを無効にする"
+    }
+  },
+  "181:19": {
+    "inputs": {
+      "model": [
+        "181:10",
+        0
+      ],
+      "conditioning": [
+        "181:68",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "基本ガイダー"
+    }
+  },
+  "181:20": {
+    "inputs": {
+      "scheduler": "normal",
+      "steps": 1,
+      "denoise": 1,
+      "model": [
+        "181:10",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "基本スケジューラー"
+    }
+  },
+  "181:21": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "181:22": {
+    "inputs": {
+      "image": [
+        "181:8",
+        0
+      ]
+    },
+    "class_type": "ImageInvert",
+    "_meta": {
+      "title": "画像を反転"
+    }
+  },
+  "181:23": {
+    "inputs": {
+      "pixels": [
+        "158",
+        0
+      ],
+      "vae": [
+        "181:14",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "181:28": {
+    "inputs": {
+      "sigma": 999.0000000000002,
+      "sigmas": [
+        "181:20",
+        0
+      ]
+    },
+    "class_type": "SetFirstSigma",
+    "_meta": {
+      "title": "SetFirstSigma"
+    }
+  },
+  "181:68": {
+    "inputs": {},
+    "class_type": "LotusConditioning",
+    "_meta": {
+      "title": "LotusConditioning"
+    }
+  },
+  "143:93": {
+    "inputs": {
+      "cfg": 3,
+      "model": [
+        "143:134",
+        0
+      ],
+      "positive": [
+        "143:132",
+        0
+      ],
+      "negative": [
+        "143:132",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGガイダー"
+    }
+  },
+  "143:94": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "143:99": {
+    "inputs": {
+      "sigmas": "0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "143:100": {
+    "inputs": {
+      "model_name": "ltx-2-spatial-upscaler-x2-1.0.safetensors"
+    },
+    "class_type": "LatentUpscaleModelLoader",
+    "_meta": {
+      "title": "Load Latent Upscale Model"
+    }
+  },
+  "143:101": {
+    "inputs": {
+      "video_latent": [
+        "143:151",
+        0
+      ],
+      "audio_latent": [
+        "143:122",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "143:108": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "143:105",
+        0
+      ],
+      "positive": [
+        "143:104",
+        0
+      ],
+      "negative": [
+        "143:104",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGガイダー"
+    }
+  },
+  "143:111": {
+    "inputs": {
+      "frames_number": [
+        "143:110",
+        2
+      ],
+      "frame_rate": [
+        "143:145",
+        0
+      ],
+      "batch_size": 1,
+      "audio_vae": [
+        "143:96",
+        0
+      ]
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": {
+      "title": "LTXV Empty Latent Audio"
+    }
+  },
+  "143:123": {
+    "inputs": {
+      "noise": [
+        "143:126",
+        0
+      ],
+      "guider": [
+        "143:93",
+        0
+      ],
+      "sampler": [
+        "143:94",
+        0
+      ],
+      "sigmas": [
+        "143:95",
+        0
+      ],
+      "latent_image": [
+        "143:116",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "143:114": {
+    "inputs": {
+      "frame_rate": [
+        "143:148",
+        0
+      ],
+      "positive": [
+        "143:124",
+        0
+      ],
+      "negative": [
+        "143:119",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV条件付け"
+    }
+  },
+  "143:119": {
+    "inputs": {
+      "text": "blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts around text, unreadable text on shirt or hat, incorrect lettering on cap (“PNTR”), incorrect t-shirt slogan (“JUST DO IT”), missing microphone, misplaced microphone, inconsistent perspective, camera shake, incorrect depth of field, background too sharp, background clutter, distracting reflections, harsh shadows, inconsistent lighting direction, color banding, cartoonish rendering, 3D CGI look, unrealistic materials, uncanny valley effect, incorrect ethnicity, wrong gender, exaggerated expressions, smiling, laughing, exaggerated sadness, wrong gaze direction, eyes looking at camera, mismatched lip sync, silent or muted audio, distorted voice, robotic voice, echo, background noise, off-sync audio, missing sniff sounds, incorrect dialogue, added dialogue, repetitive speech, jittery movement, awkward pauses, incorrect timing, unnatural transitions, inconsistent framing, tilted camera, missing door or shelves, missing shallow depth of field, flat lighting, inconsistent tone, cinematic oversaturation, stylized filters, or AI artifacts.",
+      "clip": [
+        "143:97",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIPテキストエンコード（プロンプト）"
+    }
+  },
+  "143:116": {
+    "inputs": {
+      "video_latent": [
+        "143:132",
+        2
+      ],
+      "audio_latent": [
+        "143:111",
+        0
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "143:122": {
+    "inputs": {
+      "av_latent": [
+        "143:123",
+        0
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "143:124": {
+    "inputs": {
+      "text": "サンゴ礁を泳いでいく",
+      "clip": [
+        "143:97",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIPテキストエンコード（プロンプト）"
+    }
+  },
+  "143:98": {
+    "inputs": {
+      "sampler_name": "gradient_estimation"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "143:105": {
+    "inputs": {
+      "lora_name": "ltx-2-19b-distilled-lora-384.safetensors",
+      "strength_model": 1,
+      "model": [
+        "143:134",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "143:95": {
+    "inputs": {
+      "steps": 20,
+      "max_shift": 2.05,
+      "base_shift": 0.95,
+      "stretch": true,
+      "terminal": 0.1,
+      "latent": [
+        "143:116",
+        0
+      ]
+    },
+    "class_type": "LTXVScheduler",
+    "_meta": {
+      "title": "LTXVスケジューラー"
+    }
+  },
+  "143:126": {
+    "inputs": {
+      "noise_seed": 0
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "143:107": {
+    "inputs": {
+      "noise": [
+        "143:143",
+        0
+      ],
+      "guider": [
+        "143:108",
+        0
+      ],
+      "sampler": [
+        "143:98",
+        0
+      ],
+      "sigmas": [
+        "143:99",
+        0
+      ],
+      "latent_image": [
+        "143:101",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "143:143": {
+    "inputs": {
+      "noise_seed": 0
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "143:139": {
+    "inputs": {
+      "samples": [
+        "143:138",
+        1
+      ],
+      "audio_vae": [
+        "143:96",
+        0
+      ]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": {
+      "title": "LTXV Audio VAE Decode"
+    }
+  },
+  "143:106": {
+    "inputs": {
+      "fps": [
+        "143:148",
+        0
+      ],
+      "images": [
+        "143:144",
+        0
+      ],
+      "audio": [
+        "143:139",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "動画を作成"
+    }
+  },
+  "143:134": {
+    "inputs": {
+      "lora_name": "ltx-2-19b-ic-lora-depth-control.safetensors",
+      "strength_model": 1,
+      "model": [
+        "143:103",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "143:138": {
+    "inputs": {
+      "av_latent": [
+        "143:107",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "143:144": {
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 4096,
+      "temporal_overlap": 8,
+      "samples": [
+        "143:138",
+        0
+      ],
+      "vae": [
+        "143:103",
+        2
+      ]
+    },
+    "class_type": "VAEDecodeTiled",
+    "_meta": {
+      "title": "VAEデコード（タイル）"
+    }
+  },
+  "143:113": {
+    "inputs": {
+      "samples": [
+        "143:138",
+        0
+      ],
+      "vae": [
+        "143:103",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "143:110": {
+    "inputs": {
+      "image": [
+        "181:22",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "画像サイズ取得"
+    }
+  },
+  "143:145": {
+    "inputs": {
+      "value": 24
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "整数"
+    }
+  },
+  "143:148": {
+    "inputs": {
+      "value": 24
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "浮動小数点数"
+    }
+  },
+  "143:115": {
+    "inputs": {
+      "width": [
+        "143:110",
+        0
+      ],
+      "height": [
+        "143:110",
+        1
+      ],
+      "length": [
+        "143:110",
+        2
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLTXVLatentVideo",
+    "_meta": {
+      "title": "空のLTXV潜在ビデオ"
+    }
+  },
+  "143:149": {
+    "inputs": {
+      "strength": 1,
+      "bypass": [
+        "169",
+        0
+      ],
+      "vae": [
+        "143:103",
+        2
+      ],
+      "image": [
+        "165",
+        0
+      ],
+      "latent": [
+        "143:115",
+        0
+      ]
+    },
+    "class_type": "LTXVImgToVideoInplace",
+    "_meta": {
+      "title": "LTXVImgToVideoInplace"
+    }
+  },
+  "143:151": {
+    "inputs": {
+      "strength": 1,
+      "bypass": [
+        "169",
+        0
+      ],
+      "vae": [
+        "143:103",
+        2
+      ],
+      "image": [
+        "165",
+        0
+      ],
+      "latent": [
+        "143:112",
+        0
+      ]
+    },
+    "class_type": "LTXVImgToVideoInplace",
+    "_meta": {
+      "title": "LTXVImgToVideoInplace"
+    }
+  },
+  "143:104": {
+    "inputs": {
+      "positive": [
+        "143:132",
+        0
+      ],
+      "negative": [
+        "143:132",
+        1
+      ],
+      "latent": [
+        "143:122",
+        0
+      ]
+    },
+    "class_type": "LTXVCropGuides",
+    "_meta": {
+      "title": "LTXVCropGuides"
+    }
+  },
+  "143:112": {
+    "inputs": {
+      "samples": [
+        "143:104",
+        2
+      ],
+      "upscale_model": [
+        "143:100",
+        0
+      ],
+      "vae": [
+        "143:103",
+        2
+      ]
+    },
+    "class_type": "LTXVLatentUpsampler",
+    "_meta": {
+      "title": "spatial"
+    }
+  },
+  "143:132": {
+    "inputs": {
+      "frame_idx": 0,
+      "strength": 1,
+      "positive": [
+        "143:114",
+        0
+      ],
+      "negative": [
+        "143:114",
+        1
+      ],
+      "vae": [
+        "143:103",
+        2
+      ],
+      "latent": [
+        "143:149",
+        0
+      ],
+      "image": [
+        "181:22",
+        0
+      ]
+    },
+    "class_type": "LTXVAddGuide",
+    "_meta": {
+      "title": "LTXVAddGuide"
+    }
+  },
+  "143:96": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-dev-fp8.safetensors"
+    },
+    "class_type": "LTXVAudioVAELoader",
+    "_meta": {
+      "title": "LTXV Audio VAE Loader"
+    }
+  },
+  "143:97": {
+    "inputs": {
+      "text_encoder": "gemma_3_12B_it.safetensors",
+      "ckpt_name": "ltx-2-19b-dev-fp8.safetensors"
+    },
+    "class_type": "LTXAVTextEncoderLoader",
+    "_meta": {
+      "title": "LTXV Audio Text Encoder Loader"
+    }
+  },
+  "143:103": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-dev-fp8.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "チェックポイントを読み込む"
+    }
+  }
+}

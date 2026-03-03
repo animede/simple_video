@@ -1,0 +1,250 @@
+{
+  "11": {
+    "inputs": {
+      "image": "ComfyUI_00073_ (1).png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "画像を読み込む"
+    }
+  },
+  "12": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "10:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "画像を保存"
+    }
+  },
+  "14": {
+    "inputs": {
+      "string_a": "重新照明,",
+      "string_b": [
+        "15",
+        0
+      ],
+      "delimiter": ""
+    },
+    "class_type": "StringConcatenate",
+    "_meta": {
+      "title": "LoRA trigger word"
+    }
+  },
+  "15": {
+    "inputs": {
+      "value": " relight the image using twilight light (with a warm color temperature, soft light, and blurred shadows)"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Prompt"
+    }
+  },
+  "10:75": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "10:66",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "10:39": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "10:38": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  },
+  "10:37": {
+    "inputs": {
+      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "10:110": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "10:38",
+        0
+      ],
+      "vae": [
+        "10:39",
+        0
+      ],
+      "image1": [
+        "10:117",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "10:66": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "10:118",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "10:111": {
+    "inputs": {
+      "prompt": [
+        "14",
+        0
+      ],
+      "clip": [
+        "10:38",
+        0
+      ],
+      "vae": [
+        "10:39",
+        0
+      ],
+      "image1": [
+        "10:117",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "10:88": {
+    "inputs": {
+      "pixels": [
+        "10:117",
+        0
+      ],
+      "vae": [
+        "10:39",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "10:8": {
+    "inputs": {
+      "samples": [
+        "10:3",
+        0
+      ],
+      "vae": [
+        "10:39",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "10:3": {
+    "inputs": {
+      "seed": 1118877715456453,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "10:75",
+        0
+      ],
+      "positive": [
+        "10:111",
+        0
+      ],
+      "negative": [
+        "10:110",
+        0
+      ],
+      "latent_image": [
+        "10:88",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "10:117": {
+    "inputs": {
+      "image": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "FluxKontextImageScale",
+    "_meta": {
+      "title": "FluxKontextImageScale"
+    }
+  },
+  "10:89": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "10:37",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "10:118": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Edit-2509-Relight.safetensors",
+      "strength_model": 1,
+      "model": [
+        "10:89",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  }
+}

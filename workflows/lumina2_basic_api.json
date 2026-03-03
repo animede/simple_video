@@ -1,0 +1,96 @@
+{
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "11": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "4",
+        0
+      ],
+      "shift": 6.0
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "11",
+        0
+      ],
+      "seed": "randomize",
+      "steps": 25,
+      "cfg": 4,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "13",
+        0
+      ],
+      "denoise": 1.0
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "lumina_2.safetensors"
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "blurry ugly bad",
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  },
+  "13": {
+    "class_type": "EmptySD3LatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "image/ComfyUI"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "You are an assistant designed to generate superior images with the superior degree of image-text alignment based on textual prompts or user prompts. <Prompt Start> focused exterior view on a living room of a limestone rock regular blocks shaped villa with sliding windows and timber screens in Provence along the cliff facing the sea, with waterfalls from the roof to the pool, designed by Zaha Hadid, with rocky textures and form, made of regular giant rock blocks stacked each other with infinity edge pool in front of it, blends in with the surrounding nature. Regular rock blocks. Giant rock blocks shaping the space. The image to capture the infinity edge profile of the pool and the flow of water going down creating a waterfall effect. Adriatic Sea. The design is sustainable and semi prefab. The photo is shot on a canon 5D mark 4",
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  }
+}

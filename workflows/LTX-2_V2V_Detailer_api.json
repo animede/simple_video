@@ -1,0 +1,284 @@
+{
+  "1241": {
+    "inputs": {
+      "frame_rate": [
+        "4898",
+        2
+      ],
+      "positive": [
+        "2483",
+        0
+      ],
+      "negative": [
+        "2483",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV条件付け"
+    }
+  },
+  "2483": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "4879",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "4521": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-dev.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "チェックポイントを読み込む"
+    }
+  },
+  "4637": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Kサンプラー選択"
+    }
+  },
+  "4638": {
+    "inputs": {
+      "noise_seed": 42
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "4712": {
+    "inputs": {
+      "lora_name": "ltx-2-19b-ic-lora-detailer.safetensors",
+      "strength_model": 1,
+      "model": [
+        "4521",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRAローダーモデルのみ"
+    }
+  },
+  "4784": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "largest_size": 1920,
+      "image": [
+        "4898",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToMaxDimension",
+    "_meta": {
+      "title": "画像最大寸法へのスケール"
+    }
+  },
+  "4866": {
+    "inputs": {
+      "tile_size": 512,
+      "overlap": 64,
+      "temporal_size": 500,
+      "temporal_overlap": 4,
+      "pixels": [
+        "4784",
+        0
+      ],
+      "vae": [
+        "4521",
+        2
+      ]
+    },
+    "class_type": "VAEEncodeTiled",
+    "_meta": {
+      "title": "VAEエンコード（タイル）"
+    }
+  },
+  "4878": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "4712",
+        0
+      ],
+      "positive": [
+        "1241",
+        0
+      ],
+      "negative": [
+        "1241",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGガイダー"
+    }
+  },
+  "4879": {
+    "inputs": {
+      "gemma_path": "gemma-3-12b-it-qat-q4_0-unquantized/model-00001-of-00005.safetensors",
+      "ltxv_path": "ltx-2-19b-dev.safetensors",
+      "max_length": 1024
+    },
+    "class_type": "LTXVGemmaCLIPModelLoader",
+    "_meta": {
+      "title": "🅛🅣🅧 Gemma 3 Model Loader"
+    }
+  },
+  "4880": {
+    "inputs": {
+      "temporal_tile_size": 56,
+      "temporal_overlap": 24,
+      "guiding_strength": 1,
+      "temporal_overlap_cond_strength": 0.5,
+      "cond_image_strength": 1,
+      "horizontal_tiles": 1,
+      "vertical_tiles": 1,
+      "spatial_overlap": 1,
+      "adain_factor": 0,
+      "guiding_start_step": 0,
+      "guiding_end_step": 1000,
+      "optional_cond_image_indices": "0",
+      "model": [
+        "4712",
+        0
+      ],
+      "vae": [
+        "4521",
+        2
+      ],
+      "noise": [
+        "4638",
+        0
+      ],
+      "sampler": [
+        "4637",
+        0
+      ],
+      "sigmas": [
+        "4896",
+        0
+      ],
+      "guider": [
+        "4878",
+        0
+      ],
+      "latents": [
+        "4866",
+        0
+      ],
+      "optional_guiding_latents": [
+        "4866",
+        0
+      ]
+    },
+    "class_type": "LTXVLoopingSampler",
+    "_meta": {
+      "title": "🅛🅣🅧 LTXV Looping Sampler"
+    }
+  },
+  "4887": {
+    "inputs": {
+      "fps": [
+        "4898",
+        2
+      ],
+      "images": [
+        "4899",
+        0
+      ],
+      "audio": [
+        "4898",
+        1
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "動画を作成"
+    }
+  },
+  "4895": {
+    "inputs": {
+      "filename_prefix": "LTX-2/Video",
+      "format": "auto",
+      "codec": "auto",
+      "video-preview": "",
+      "video": [
+        "4887",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "4896": {
+    "inputs": {
+      "sigmas": "0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "4898": {
+    "inputs": {
+      "video": [
+        "4905",
+        0
+      ]
+    },
+    "class_type": "GetVideoComponents",
+    "_meta": {
+      "title": "ビデオコンポーネントの取得"
+    }
+  },
+  "4899": {
+    "inputs": {
+      "spatial_tiles": 4,
+      "spatial_overlap": 4,
+      "temporal_tile_length": 16,
+      "temporal_overlap": 4,
+      "last_frame_fix": false,
+      "working_device": "auto",
+      "working_dtype": "auto",
+      "vae": [
+        "4521",
+        2
+      ],
+      "latents": [
+        "4880",
+        0
+      ]
+    },
+    "class_type": "LTXVSpatioTemporalTiledVAEDecode",
+    "_meta": {
+      "title": "🅛🅣🅧 LTXV Spatio Temporal Tiled VAE Decode"
+    }
+  },
+  "4905": {
+    "inputs": {
+      "file": "concat_20260106_180708.mp4",
+      "video-preview": ""
+    },
+    "class_type": "LoadVideo",
+    "_meta": {
+      "title": "ビデオを読み込む"
+    }
+  }
+}

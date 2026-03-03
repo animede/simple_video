@@ -1,0 +1,178 @@
+{
+  "12": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "41",
+        1
+      ],
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "18": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "41",
+        1
+      ],
+      "text": [
+        "38",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "38": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "A lovely Japanese girl with twintails and swept bangs, wearing a gothic frilled dress with lace, a hair bow, a cross necklace, and a frilled choker with bell, gently holding a new gold iPhone, shows it off with a proud smile, and jumps up and down in joy. Set in a cozy open-air café interior. Cinematic, smooth motion, 4K, TikTok vertical video.\n\n"
+    },
+    "_meta": {
+      "title": "String (Multiline) (Positive Prompt)"
+    }
+  },
+  "31": {
+    "class_type": "EmptyHunyuanLatentVideo",
+    "inputs": {
+      "width": 480,
+      "height": 720,
+      "length": 81,
+      "batch_size": 1
+    }
+  },
+  "11": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "10",
+        0
+      ],
+      "fps": 16
+    }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "13",
+        0
+      ],
+      "vae": [
+        "41",
+        2
+      ]
+    }
+  },
+  "7": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "positive": [
+        "18",
+        0
+      ],
+      "negative": [
+        "12",
+        0
+      ],
+      "latent_image": [
+        "31",
+        0
+      ],
+      "add_noise": "enable",
+      "noise_seed": 1063002279655174,
+      "control_after_generate": "randomize",
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 3,
+      "return_with_leftover_noise": "enable"
+    }
+  },
+  "13": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "36",
+        0
+      ],
+      "positive": [
+        "18",
+        0
+      ],
+      "negative": [
+        "12",
+        0
+      ],
+      "latent_image": [
+        "7",
+        0
+      ],
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "control_after_generate": "fixed",
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 3,
+      "end_at_step": 1000,
+      "return_with_leftover_noise": "disable"
+    }
+  },
+  "36": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "42",
+        0
+      ],
+      "shift": 8
+    }
+  },
+  "41": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "smoothMixWan22I2VT2V_t2vHighV20.safetensors"
+    }
+  },
+  "42": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "smoothMixWan22I2VT2V_t2vLowV20.safetensors"
+    }
+  },
+  "5": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "41",
+        0
+      ],
+      "shift": 8
+    }
+  },
+  "39": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "11",
+        0
+      ],
+      "filename_prefix": "video/Wan2.2 Smooth T2V",
+      "format": "mp4",
+      "codec": "h264"
+    }
+  }
+}

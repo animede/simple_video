@@ -1,0 +1,176 @@
+{
+  "39": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    }
+  },
+  "38": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "flux",
+      "device": "default"
+    }
+  },
+  "135": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ]
+    }
+  },
+  "173": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "42",
+        0
+      ]
+    }
+  },
+  "136": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "image/ComfyUI"
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "31",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    }
+  },
+  "124": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "42",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    }
+  },
+  "42": {
+    "class_type": "FluxKontextImageScale",
+    "inputs": {
+      "image": [
+        "146",
+        0
+      ]
+    }
+  },
+  "146": {
+    "class_type": "ImageStitch",
+    "inputs": {
+      "image1": [
+        "190",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 0,
+      "image2": [
+        "191",
+        0
+      ],
+      "spacing_color": "white"
+    }
+  },
+  "35": {
+    "class_type": "FluxGuidance",
+    "inputs": {
+      "conditioning": [
+        "177",
+        0
+      ],
+      "guidance": 3.5
+    }
+  },
+  "37": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux1-dev-kontext_fp8_scaled.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "177": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "124",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "A cozy indoor room scene with two characters: a realistic brown rabbit sitting on the left side and an elegant person with refined features standing on the right side. Both are in the same room with warm lighting, wooden floor, and soft furnishings. The room has a comfortable atmosphere with natural window light. Maintain both characters' exact appearance from the reference images.",
+      "clip": [
+        "38",
+        0
+      ]
+    }
+  },
+  "31": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "37",
+        0
+      ],
+      "seed": "randomize",
+      "steps": 20,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "35",
+        0
+      ],
+      "negative": [
+        "135",
+        0
+      ],
+      "latent_image": [
+        "124",
+        0
+      ],
+      "denoise": 1.0
+    }
+  },
+  "190": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "rabbit.jpg"
+    }
+  },
+  "191": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "flux_1_kontext_dev_basic.png"
+    }
+  }
+}

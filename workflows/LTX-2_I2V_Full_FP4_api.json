@@ -1,0 +1,638 @@
+{
+  "4958": {
+    "inputs": {
+      "filename_prefix": "video/LTX-2-FP4",
+      "format": "auto",
+      "codec": "auto",
+      "video-preview": "",
+      "video": [
+        "5190",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "\u30d3\u30c7\u30aa\u3092\u4fdd\u5b58"
+    }
+  },
+  "5173": {
+    "inputs": {
+      "frame_rate": [
+        "5184",
+        0
+      ],
+      "positive": [
+        "5174",
+        0
+      ],
+      "negative": [
+        "5198",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV\u6761\u4ef6\u4ed8\u3051"
+    }
+  },
+  "5174": {
+    "inputs": {
+      "text": [
+        "5192",
+        0
+      ],
+      "clip": [
+        "5178",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Enhanced Prompt (Positive)"
+    }
+  },
+  "5175": {
+    "inputs": {
+      "value": " cinematic thriller adventure movie scene shows an intrigued blonde female explorer holding a fiery torch. she looks curious and excited initially, but then a gust of wind blows her hair. her face turns concerned and frowned as says with a whispering tone of voice: \"these markings aren't just random...it's a warning...\"\nthe camera slowly zooms in and remains focused on her face"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "5176": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-dev-fp4.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "\u30c1\u30a7\u30c3\u30af\u30dd\u30a4\u30f3\u30c8\u3092\u8aad\u307f\u8fbc\u3080"
+    }
+  },
+  "5178": {
+    "inputs": {
+      "gemma_path": "gemma-3-12b-it-qat-q4_0-unquantized/model-00001-of-00005.safetensors",
+      "ltxv_path": "ltx-2-19b-dev-fp4.safetensors",
+      "max_length": 1024
+    },
+    "class_type": "LTXVGemmaCLIPModelLoader",
+    "_meta": {
+      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 Gemma 3 Model Loader"
+    }
+  },
+  "5180": {
+    "inputs": {
+      "image": "sid_0abcbe79af69__rembg_20260106_174927_e896337a (\u30b3\u30d4\u30fc).png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "\u753b\u50cf\u3092\u8aad\u307f\u8fbc\u3080"
+    }
+  },
+  "5184": {
+    "inputs": {
+      "value": 24
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Frame Rate"
+    }
+  },
+  "5185": {
+    "inputs": {
+      "width": 1280,
+      "height": 704,
+      "batch_size": 1,
+      "color": 0
+    },
+    "class_type": "EmptyImage",
+    "_meta": {
+      "title": "\u7a7a\u306e\u753b\u50cf"
+    }
+  },
+  "5186": {
+    "inputs": {
+      "value": 121
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "length"
+    }
+  },
+  "5188": {
+    "inputs": {
+      "ckpt_name": "ltx-2-19b-dev-fp4.safetensors"
+    },
+    "class_type": "LTXVAudioVAELoader",
+    "_meta": {
+      "title": "LTXV Audio VAE Loader"
+    }
+  },
+  "5190": {
+    "inputs": {
+      "fps": [
+        "5184",
+        0
+      ],
+      "images": [
+        "5189:5237",
+        0
+      ],
+      "audio": [
+        "5189:5103",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "\u52d5\u753b\u3092\u4f5c\u6210"
+    }
+  },
+  "5192": {
+    "inputs": {
+      "prompt": [
+        "5175",
+        0
+      ],
+      "system_prompt": "You are a Creative Assistant writing concise, action-focused image-to-video prompts. Given an image (first frame) and user Raw Input Prompt, generate a prompt to guide video generation from that image.\n\n#### Guidelines:\n- Analyze the Image: Identify Subject, Setting, Elements, Style and Mood.\n- Follow user Raw Input Prompt: Include all requested motion, actions, camera movements, audio, and details. If in conflict with the image, prioritize user request while maintaining visual consistency (describe transition from image to user's scene).\n- Describe only changes from the image: Don't reiterate established visual details. Inaccurate descriptions may cause scene cuts.\n- Active language: Use present-progressive verbs (\"is walking,\" \"speaking\"). If no action specified, describe natural movements.\n- Chronological flow: Use temporal connectors (\"as,\" \"then,\" \"while\").\n- Audio layer: Describe complete soundscape throughout the prompt alongside actions\u2014NOT at the end. Align audio intensity with action tempo. Include natural background audio, ambient sounds, effects, speech or music (when requested). Be specific (e.g., \"soft footsteps on tile\") not vague (e.g., \"ambient sound\").\n- Speech (only when requested): Provide exact words in quotes with character's visual/voice characteristics (e.g., \"The tall man speaks in a low, gravelly voice\"), language if not English and accent if relevant. If general conversation mentioned without text, generate contextual quoted dialogue. (i.e., \"The man is talking\" input -> the output should include exact spoken words, like: \"The man is talking in an excited voice saying: 'You won't believe what I just saw!' His hands gesture expressively as he speaks, eyebrows raised with enthusiasm. The ambient sound of a quiet room underscores his animated speech.\")\n- Style: Include visual style at beginning: \"Style: <style>, <rest of prompt>.\" If unclear, omit to avoid conflicts.\n- Visual and audio only: Describe only what is seen and heard. NO smell, taste, or tactile sensations.\n- Restrained language: Avoid dramatic terms. Use mild, natural, understated phrasing.\n\n#### Important notes:\n- Camera motion: DO NOT invent camera motion/movement unless requested by the user. Make sure to include camera motion only if specified in the input.\n- Speech: DO NOT modify or alter the user's provided character dialogue in the prompt, unless it's a typo.\n- No timestamps or cuts: DO NOT use timestamps or describe scene cuts unless explicitly requested.\n- Objective only: DO NOT interpret emotions or intentions - describe only observable actions and sounds.\n- Format: DO NOT use phrases like \"The scene opens with...\" / \"The video starts...\". Start directly with Style (optional) and chronological scene description.\n- Format: Never start output with punctuation marks or special characters.\n- DO NOT invent dialogue unless the user mentions speech/talking/singing/conversation.\n- Your performance is CRITICAL. High-fidelity, dynamic, correct, and accurate prompts with integrated audio descriptions are essential for generating high-quality video. Your goal is flawless execution of these rules.\n\n#### Output Format (Strict):\n- Single concise paragraph in natural English. NO titles, headings, prefaces, sections, code fences, or Markdown.\n- If unsafe/invalid, return original user prompt. Never ask questions or clarifications.\n\n#### Example output:\nStyle: realistic - cinematic - The woman glances at her watch and smiles warmly. She speaks in a cheerful, friendly voice, \"I think we're right on time!\" In the background, a caf\u00e9 barista prepares drinks at the counter. The barista calls out in a clear, upbeat tone, \"Two cappuccinos ready!\" The sound of the espresso machine hissing softly blends with gentle background chatter and the light clinking of cups on saucers.",
+      "max_tokens": 512,
+      "bypass_i2v": false,
+      "seed": 2039132272,
+      "clip": [
+        "5178",
+        0
+      ],
+      "image": [
+        "5180",
+        0
+      ]
+    },
+    "class_type": "LTXVGemmaEnhancePrompt",
+    "_meta": {
+      "title": "Enhancer"
+    }
+  },
+  "5196": {
+    "inputs": {
+      "a": [
+        "5184",
+        0
+      ]
+    },
+    "class_type": "CM_FloatToInt",
+    "_meta": {
+      "title": "Frame Rate"
+    }
+  },
+  "5198": {
+    "inputs": {
+      "text": "blurry, low quality, still frame, frames, watermark, overlay, titles, has blurbox, has subtitles",
+      "clip": [
+        "5178",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP\u30c6\u30ad\u30b9\u30c8\u30a8\u30f3\u30b3\u30fc\u30c9\uff08\u30d7\u30ed\u30f3\u30d7\u30c8\uff09"
+    }
+  },
+  "5212": {
+    "inputs": {
+      "model_name": "ltx-2-spatial-upscaler-x2-1.0.safetensors"
+    },
+    "class_type": "LatentUpscaleModelLoader",
+    "_meta": {
+      "title": "Load Latent Upscale Model"
+    }
+  },
+  "5189:5114": {
+    "inputs": {
+      "av_latent": [
+        "5189:5107",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "5189:5107": {
+    "inputs": {
+      "noise": [
+        "5189:5111",
+        0
+      ],
+      "guider": [
+        "5189:5110",
+        0
+      ],
+      "sampler": [
+        "5189:5109",
+        0
+      ],
+      "sigmas": [
+        "5189:5236",
+        0
+      ],
+      "latent_image": [
+        "5189:5108",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "\u30ab\u30b9\u30bf\u30e0\u30b5\u30f3\u30d7\u30e9\u30fc\uff08\u9ad8\u5ea6\uff09"
+    }
+  },
+  "5189:5138": {
+    "inputs": {
+      "width": [
+        "5189:5069",
+        0
+      ],
+      "height": [
+        "5189:5069",
+        1
+      ],
+      "length": [
+        "5186",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLTXVLatentVideo",
+    "_meta": {
+      "title": "\u7a7a\u306eLTXV\u6f5c\u5728\u30d3\u30c7\u30aa"
+    }
+  },
+  "5189:5097": {
+    "inputs": {
+      "noise_seed": 420
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "\u30e9\u30f3\u30c0\u30e0\u30ce\u30a4\u30ba"
+    }
+  },
+  "5189:5108": {
+    "inputs": {
+      "video_latent": [
+        "5189:5245",
+        0
+      ],
+      "audio_latent": [
+        "5189:5152",
+        0
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "5189:5236": {
+    "inputs": {
+      "steps": 20,
+      "max_shift": 2.05,
+      "base_shift": 0.95,
+      "stretch": true,
+      "terminal": 0.1,
+      "latent": [
+        "5189:5108",
+        0
+      ]
+    },
+    "class_type": "LTXVScheduler",
+    "_meta": {
+      "title": "LTXV\u30b9\u30b1\u30b8\u30e5\u30fc\u30e9\u30fc"
+    }
+  },
+  "5189:5110": {
+    "inputs": {
+      "cfg": 4,
+      "model": [
+        "5176",
+        0
+      ],
+      "positive": [
+        "5189:5238",
+        0
+      ],
+      "negative": [
+        "5173",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFG\u30ac\u30a4\u30c0\u30fc"
+    }
+  },
+  "5189:5237": {
+    "inputs": {
+      "spatial_tiles": 4,
+      "spatial_overlap": 4,
+      "temporal_tile_length": 16,
+      "temporal_overlap": 4,
+      "last_frame_fix": false,
+      "working_device": "auto",
+      "working_dtype": "auto",
+      "vae": [
+        "5189:5238",
+        1
+      ],
+      "latents": [
+        "5189:5104",
+        0
+      ]
+    },
+    "class_type": "LTXVSpatioTemporalTiledVAEDecode",
+    "_meta": {
+      "title": "\ud83c\udd5b\ud83c\udd63\ud83c\udd67 LTXV Spatio Temporal Tiled VAE Decode"
+    }
+  },
+  "5189:5103": {
+    "inputs": {
+      "samples": [
+        "5189:5104",
+        1
+      ],
+      "audio_vae": [
+        "5188",
+        0
+      ]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": {
+      "title": "LTXV Audio VAE Decode"
+    }
+  },
+  "5189:5111": {
+    "inputs": {
+      "noise_seed": 50
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "\u30e9\u30f3\u30c0\u30e0\u30ce\u30a4\u30ba"
+    }
+  },
+  "5189:5238": {
+    "inputs": {
+      "signal": [
+        "5173",
+        0
+      ],
+      "value": [
+        "5176",
+        2
+      ]
+    },
+    "class_type": "ImpactExecutionOrderController",
+    "_meta": {
+      "title": "Execution Order Controller"
+    }
+  },
+  "5189:5152": {
+    "inputs": {
+      "frames_number": [
+        "5186",
+        0
+      ],
+      "frame_rate": [
+        "5196",
+        0
+      ],
+      "batch_size": 1,
+      "audio_vae": [
+        "5188",
+        0
+      ]
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": {
+      "title": "LTXV Empty Latent Audio"
+    }
+  },
+  "5189:5240": {
+    "inputs": {
+      "img_compression": 33,
+      "image": [
+        "5189:5239",
+        0
+      ]
+    },
+    "class_type": "LTXVPreprocess",
+    "_meta": {
+      "title": "LTXVPreprocess"
+    }
+  },
+  "5189:5100": {
+    "inputs": {
+      "noise": [
+        "5189:5097",
+        0
+      ],
+      "guider": [
+        "5189:5098",
+        0
+      ],
+      "sampler": [
+        "5189:5099",
+        0
+      ],
+      "sigmas": [
+        "5189:5233",
+        0
+      ],
+      "latent_image": [
+        "5189:5112",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "\u30ab\u30b9\u30bf\u30e0\u30b5\u30f3\u30d7\u30e9\u30fc\uff08\u9ad8\u5ea6\uff09"
+    }
+  },
+  "5189:5104": {
+    "inputs": {
+      "av_latent": [
+        "5189:5100",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "5189:5233": {
+    "inputs": {
+      "sigmas": "0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "ManualSigmas"
+    }
+  },
+  "5189:5098": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "5176",
+        0
+      ],
+      "positive": [
+        "5189:5238",
+        0
+      ],
+      "negative": [
+        "5173",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFG\u30ac\u30a4\u30c0\u30fc"
+    }
+  },
+  "5189:5112": {
+    "inputs": {
+      "video_latent": [
+        "5189:5246",
+        0
+      ],
+      "audio_latent": [
+        "5189:5114",
+        1
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "5189:5246": {
+    "inputs": {
+      "strength": 1,
+      "bypass": false,
+      "vae": [
+        "5189:5238",
+        1
+      ],
+      "image": [
+        "5189:5239",
+        0
+      ],
+      "latent": [
+        "5189:5247",
+        0
+      ]
+    },
+    "class_type": "LTXVImgToVideoInplace",
+    "_meta": {
+      "title": "LTXVImgToVideoInplace"
+    }
+  },
+  "5189:5247": {
+    "inputs": {
+      "samples": [
+        "5189:5114",
+        0
+      ],
+      "upscale_model": [
+        "5212",
+        0
+      ],
+      "vae": [
+        "5189:5238",
+        1
+      ]
+    },
+    "class_type": "LTXVLatentUpsampler",
+    "_meta": {
+      "title": "LTXVLatentUpsampler"
+    }
+  },
+  "5189:5245": {
+    "inputs": {
+      "strength": 0.6,
+      "bypass": false,
+      "vae": [
+        "5189:5238",
+        1
+      ],
+      "image": [
+        "5189:5240",
+        0
+      ],
+      "latent": [
+        "5189:5138",
+        0
+      ]
+    },
+    "class_type": "LTXVImgToVideoInplace",
+    "_meta": {
+      "title": "LTXVImgToVideoInplace"
+    }
+  },
+  "5189:5075": {
+    "inputs": {
+      "upscale_method": "bicubic",
+      "scale_by": 0.5,
+      "image": [
+        "5185",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "\u753b\u50cf\u3092\u62e1\u5927\uff08\u6307\u5b9a\u30b5\u30a4\u30ba\uff09"
+    }
+  },
+  "5189:5069": {
+    "inputs": {
+      "image": [
+        "5189:5075",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "\u753b\u50cf\u30b5\u30a4\u30ba\u53d6\u5f97"
+    }
+  },
+  "5189:5239": {
+    "inputs": {
+      "longer_edge": 1536,
+      "images": [
+        "5180",
+        0
+      ]
+    },
+    "class_type": "ResizeImagesByLongerEdge",
+    "_meta": {
+      "title": "Resize Images by Longer Edge"
+    }
+  },
+  "5189:5109": {
+    "inputs": {
+      "sampler_name": "res_2s"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K\u30b5\u30f3\u30d7\u30e9\u30fc\u9078\u629e"
+    }
+  },
+  "5189:5099": {
+    "inputs": {
+      "sampler_name": "res_2s"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K\u30b5\u30f3\u30d7\u30e9\u30fc\u9078\u629e"
+    }
+  }
+}

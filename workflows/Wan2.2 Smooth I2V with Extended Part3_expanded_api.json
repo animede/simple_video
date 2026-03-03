@@ -1,0 +1,352 @@
+{
+  "103": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "156",
+        0
+      ],
+      "shift": 8
+    }
+  },
+  "104": {
+    "class_type": "ModelSamplingSD3",
+    "inputs": {
+      "model": [
+        "157",
+        0
+      ],
+      "shift": 8
+    }
+  },
+  "86": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "104",
+        0
+      ],
+      "positive": [
+        "98",
+        0
+      ],
+      "negative": [
+        "98",
+        1
+      ],
+      "latent_image": [
+        "98",
+        2
+      ],
+      "add_noise": "enable",
+      "noise_seed": 67647449999528,
+      "control_after_generate": "randomize",
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 3,
+      "return_with_leftover_noise": "enable"
+    }
+  },
+  "85": {
+    "class_type": "KSamplerAdvanced",
+    "inputs": {
+      "model": [
+        "103",
+        0
+      ],
+      "positive": [
+        "98",
+        0
+      ],
+      "negative": [
+        "98",
+        1
+      ],
+      "latent_image": [
+        "86",
+        0
+      ],
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "control_after_generate": "fixed",
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral",
+      "scheduler": "simple",
+      "start_at_step": 3,
+      "end_at_step": 1000,
+      "return_with_leftover_noise": "disable"
+    }
+  },
+  "117": {
+    "class_type": "GetImageSize",
+    "inputs": {
+      "image": [
+        "116",
+        0
+      ]
+    }
+  },
+  "87": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "85",
+        0
+      ],
+      "vae": [
+        "157",
+        2
+      ]
+    }
+  },
+  "94": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": [
+        "87",
+        0
+      ],
+      "fps": 16
+    }
+  },
+  "93": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "157",
+        1
+      ],
+      "text": "jumping and arms up, jumping."
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "98": {
+    "class_type": "WanImageToVideo",
+    "inputs": {
+      "positive": [
+        "206",
+        0
+      ],
+      "negative": [
+        "89",
+        0
+      ],
+      "vae": [
+        "157",
+        2
+      ],
+      "clip_vision_output": [
+        "129",
+        0
+      ],
+      "start_image": [
+        "116",
+        0
+      ],
+      "width": [
+        "117",
+        0
+      ],
+      "height": [
+        "117",
+        1
+      ],
+      "length": 81,
+      "batch_size": 1
+    }
+  },
+  "89": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "157",
+        1
+      ],
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "150": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走"
+    },
+    "_meta": {
+      "title": "sample (Negative Prompt)"
+    }
+  },
+  "142": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走, censored, mosaic censoring, bar censor, pixelated, glowing, bloom, blurry, day, out of focus, low detail, bad anatomy, ugly, overexposed, underexposed, distorted face, extra limbs, cartoonish, 3d render artifacts, duplicate people, unnatural lighting, bad composition, missing shadows, low resolution, poorly textured, glitch, noise, grain, static, motionless, still frame, overall grayish, worst quality, low quality, JPEG compression artifacts, subtitles, stylized, artwork, painting, illustration, cluttered background, many people in background, three legs, walking backward, zoom out, zoom in, mouth speaking, moving mouth, talking, speaking, mute speaking, unnatural skin tone, discolored eyelid, red eyelids, red upper eyelids, no red eyeshadow, closed eyes, no wide-open innocent eyes, poorly drawn hands, extra fingers, fused fingers, poorly drawn face, deformed, disfigured, malformed limbs, thighs, fog, mist, voluminous eyelashes, blush,"
+    },
+    "_meta": {
+      "title": "sample (Negative Prompt)"
+    }
+  },
+  "116": {
+    "class_type": "ImageScaleToMaxDimension",
+    "inputs": {
+      "image": [
+        "97",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "largest_size": 720
+    }
+  },
+  "157": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "smoothMixWan22I2VT2V_i2vHigh.safetensors"
+    }
+  },
+  "156": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "smoothMixWan22I2VT2V_i2vLow.safetensors"
+    }
+  },
+  "127": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "clip_vision_h.safetensors"
+    }
+  },
+  "129": {
+    "class_type": "CLIPVisionEncode",
+    "inputs": {
+      "clip_vision": [
+        "127",
+        0
+      ],
+      "image": [
+        "97",
+        0
+      ],
+      "crop": "none"
+    }
+  },
+  "119": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 480,
+      "height": 720,
+      "batch_size": 1
+    }
+  },
+  "200": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "157",
+        1
+      ],
+      "text": "shows it off with a proud smile"
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "201": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "157",
+        1
+      ],
+      "text": "and jumps up and down in joy"
+    },
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "202": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "93",
+        0
+      ],
+      "start": 0.0,
+      "end": 0.33
+    }
+  },
+  "203": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "200",
+        0
+      ],
+      "start": 0.33,
+      "end": 0.66
+    }
+  },
+  "204": {
+    "class_type": "ConditioningSetTimestepRange",
+    "inputs": {
+      "conditioning": [
+        "201",
+        0
+      ],
+      "start": 0.66,
+      "end": 1.0
+    }
+  },
+  "205": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "202",
+        0
+      ],
+      "conditioning_2": [
+        "203",
+        0
+      ]
+    }
+  },
+  "206": {
+    "class_type": "ConditioningCombine",
+    "inputs": {
+      "conditioning_1": [
+        "205",
+        0
+      ],
+      "conditioning_2": [
+        "204",
+        0
+      ]
+    }
+  },
+  "108": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": [
+        "94",
+        0
+      ],
+      "filename_prefix": "video/Wan2.2 Smooth I2V",
+      "format": "auto",
+      "codec": "auto"
+    }
+  },
+  "97": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "sample_001.webp"
+    },
+    "_meta": {
+      "title": "Start Frame Image"
+    }
+  }
+}

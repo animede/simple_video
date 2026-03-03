@@ -1,0 +1,166 @@
+{
+  "75": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "image": [
+        "71",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "megapixels": 1.0,
+      "resolution_steps": 64
+    }
+  },
+  "69": {
+    "class_type": "QwenImageDiffsynthControlnet",
+    "inputs": {
+      "model": [
+        "66",
+        0
+      ],
+      "model_patch": [
+        "70",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ],
+      "image": [
+        "75",
+        0
+      ],
+      "mask": [
+        "71",
+        1
+      ],
+      "strength": 1.0
+    }
+  },
+  "66": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "37",
+        0
+      ],
+      "shift": 1.73
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    }
+  },
+  "70": {
+    "class_type": "ModelPatchLoader",
+    "inputs": {
+      "name": "qwen_image_inpaint_diffsynth_controlnet.safetensors"
+    }
+  },
+  "39": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "37": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "qwen_image_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "76": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "75",
+        0
+      ],
+      "vae": [
+        "39",
+        0
+      ]
+    }
+  },
+  "38": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "71": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "example.png"
+    }
+  },
+  "60": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "image/qwen_image_controlnet_inpaint"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "a beautiful landscape",
+      "clip": [
+        "38",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": " ",
+      "clip": [
+        "38",
+        0
+      ]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "69",
+        0
+      ],
+      "seed": 12345,
+      "steps": 20,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "76",
+        0
+      ],
+      "denoise": 1.0
+    }
+  }
+}

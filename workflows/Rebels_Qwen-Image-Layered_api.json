@@ -1,0 +1,355 @@
+{
+  "74": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "ComfyUI_00005_.png"
+    }
+  },
+  "117": {
+    "class_type": "mxSlider",
+    "inputs": {
+      "Xi": 3,
+      "Xf": 3,
+      "isfloatX": 0
+    }
+  },
+  "129": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_layered_vae.safetensors"
+    }
+  },
+  "130": {
+    "class_type": "UnetLoaderGGUF",
+    "inputs": {
+      "unet_name": "Qwen_Image_Layered-Q3_K_S.gguf"
+    }
+  },
+  "131": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "131",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "",
+      "clip": [
+        "131",
+        0
+      ]
+    }
+  },
+  "132": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 332422635234960
+    }
+  },
+  "139": {
+    "class_type": "PrimitiveBoolean",
+    "inputs": {
+      "value": true
+    }
+  },
+  "140": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 1024
+    }
+  },
+  "137": {
+    "class_type": "PrimitiveBoolean",
+    "inputs": {
+      "value": [
+        "139",
+        0
+      ]
+    }
+  },
+  "138": {
+    "class_type": "INTConstant",
+    "inputs": {
+      "value": [
+        "140",
+        0
+      ]
+    }
+  },
+  "156": {
+    "class_type": "PrimitiveBoolean",
+    "inputs": {
+      "value": false
+    }
+  },
+  "141": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "7",
+        0
+      ],
+      "latent": [
+        "152",
+        0
+      ]
+    }
+  },
+  "142": {
+    "class_type": "MathExpression|pysssss",
+    "inputs": {
+      "expression": "a / iif(b > c, b, c)",
+      "a": [
+        "138",
+        0
+      ],
+      "b": [
+        "143",
+        0
+      ],
+      "c": [
+        "143",
+        1
+      ]
+    }
+  },
+  "143": {
+    "class_type": "GetImageSize",
+    "inputs": {
+      "image": [
+        "74",
+        0
+      ]
+    }
+  },
+  "144": {
+    "class_type": "MathExpression|pysssss",
+    "inputs": {
+      "expression": "4*a+1",
+      "a": [
+        "117",
+        0
+      ]
+    }
+  },
+  "146": {
+    "class_type": "EmptyHunyuanLatentVideo",
+    "inputs": {
+      "width": [
+        "153",
+        0
+      ],
+      "height": [
+        "149",
+        0
+      ],
+      "length": [
+        "144",
+        0
+      ],
+      "batch_size": 1
+    }
+  },
+  "147": {
+    "class_type": "MathExpression|pysssss",
+    "inputs": {
+      "expression": "floor(a * b)",
+      "a": [
+        "142",
+        1
+      ],
+      "b": [
+        "143",
+        0
+      ]
+    }
+  },
+  "148": {
+    "class_type": "ResizeImagesByLongerEdge",
+    "inputs": {
+      "images": [
+        "74",
+        0
+      ],
+      "longer_edge": [
+        "138",
+        0
+      ]
+    }
+  },
+  "149": {
+    "class_type": "LazySwitchKJ",
+    "inputs": {
+      "switch": [
+        "156",
+        0
+      ],
+      "on_false": [
+        "143",
+        1
+      ],
+      "on_true": [
+        "150",
+        0
+      ]
+    }
+  },
+  "150": {
+    "class_type": "MathExpression|pysssss",
+    "inputs": {
+      "expression": "floor(a * b)",
+      "a": [
+        "142",
+        1
+      ],
+      "b": [
+        "143",
+        1
+      ]
+    }
+  },
+  "151": {
+    "class_type": "LazySwitchKJ",
+    "inputs": {
+      "switch": [
+        "156",
+        0
+      ],
+      "on_false": [
+        "74",
+        0
+      ],
+      "on_true": [
+        "148",
+        0
+      ]
+    }
+  },
+  "152": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "151",
+        0
+      ],
+      "vae": [
+        "129",
+        0
+      ]
+    }
+  },
+  "153": {
+    "class_type": "LazySwitchKJ",
+    "inputs": {
+      "switch": [
+        "156",
+        0
+      ],
+      "on_false": [
+        "143",
+        0
+      ],
+      "on_true": [
+        "147",
+        0
+      ]
+    }
+  },
+  "154": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "6",
+        0
+      ],
+      "latent": [
+        "152",
+        0
+      ]
+    }
+  },
+  "155": {
+    "class_type": "ModelSamplingAuraFlow",
+    "inputs": {
+      "model": [
+        "124",
+        0
+      ]
+    }
+  },
+  "135": {
+    "class_type": "LatentCut",
+    "inputs": {
+      "samples": [
+        "114",
+        0
+      ],
+      "dim": 0,
+      "index": 1
+    }
+  },
+  "136": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "135",
+        0
+      ],
+      "vae": [
+        "129",
+        0
+      ]
+    }
+  },
+  "114": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "155",
+        0
+      ],
+      "seed": [
+        "132",
+        0
+      ],
+      "steps": 25,
+      "cfg": 2.5,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": [
+        "154",
+        0
+      ],
+      "negative": [
+        "141",
+        0
+      ],
+      "latent_image": [
+        "146",
+        0
+      ]
+    }
+  },
+  "60": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "136",
+        0
+      ]
+    }
+  }
+}
