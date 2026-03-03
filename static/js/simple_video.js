@@ -8594,11 +8594,6 @@ async function startIntermediateImageGeneration(options = {}) {
             }
             params.prompt = finalExpandedPrompt;
 
-            // When using character sheet as scene I2I reference, prepend a descriptive hint.
-            if (usesCharacterImage && useSheetAsRef) {
-                params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
-            }
-
             // For presets using character image (char_edit_i2i_flf, char_edit_i2v_scene_cut),
             // use character composite image (or fallback ref) as reference with refSource logic.
             if (usesCharacterImage) {
@@ -11032,11 +11027,6 @@ async function startGeneration() {
                 params.prompt = scenePrompt;
                 params.input_image = refForThisScene;
 
-                // When using character sheet as reference, prepend descriptive hint
-                if (useSheetAsRef2) {
-                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
-                }
-
                 // ref3: add as input_image_2 and inject prompt hint
                 if (ref3Active && state.dropSlots?.[2]?.filename) {
                     params.input_image_2 = state.dropSlots[2].filename;
@@ -11325,11 +11315,6 @@ async function startGeneration() {
 
                 params.prompt = scenePrompt;
                 params.input_image = refForThisScene;
-
-                // When using character sheet as reference, prepend descriptive hint
-                if (useSheetAsRef3) {
-                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
-                }
 
                 // ref3: add as input_image_2 and inject prompt hint
                 if (ref3Active && state.dropSlots?.[2]?.filename) {
