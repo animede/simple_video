@@ -1,0 +1,1598 @@
+{
+  "1": {
+    "inputs": {
+      "image": "Qwen-Image-2512-I2I_00014_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Character Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAEを読み込む"
+    }
+  },
+  "3": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIPを読み込む"
+    }
+  },
+  "4": {
+    "inputs": {
+      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "拡散モデルを読み込む"
+    }
+  },
+  "5": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA - Lightning 4steps"
+    }
+  },
+  "6": {
+    "inputs": {
+      "lora_name": "Qwen-Edit-2509-Multiple-angles.safetensors",
+      "strength_model": 1,
+      "model": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA - Multiple Angles"
+    }
+  },
+  "10": {
+    "inputs": {
+      "value": "Show the character in a full body front view, facing directly toward the camera, neutral standing A-pose with arms slightly away from the body, full figure visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "01 - Front View (正面全身)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "12": {
+    "inputs": {
+      "pixels": [
+        "11",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "13": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "14": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "15": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "16": {
+    "inputs": {
+      "prompt": [
+        "10",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "17": {
+    "inputs": {
+      "seed": 496224666602166,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "15",
+        0
+      ],
+      "positive": [
+        "16",
+        0
+      ],
+      "negative": [
+        "13",
+        0
+      ],
+      "latent_image": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "18": {
+    "inputs": {
+      "samples": [
+        "17",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "19": {
+    "inputs": {
+      "filename_prefix": "CharSheet-01_front",
+      "images": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 01 - Front View (正面全身)"
+    }
+  },
+  "20": {
+    "inputs": {
+      "value": "Show the character from behind in a full body back view, rear facing the camera, neutral standing pose, showing all back details, hair, costume and accessories from behind, full figure head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "02 - Back View (背面全身)"
+    }
+  },
+  "21": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "22": {
+    "inputs": {
+      "pixels": [
+        "21",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "23": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "24": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "25": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "26": {
+    "inputs": {
+      "prompt": [
+        "20",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "27": {
+    "inputs": {
+      "seed": 334558692371340,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "25",
+        0
+      ],
+      "positive": [
+        "26",
+        0
+      ],
+      "negative": [
+        "23",
+        0
+      ],
+      "latent_image": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "28": {
+    "inputs": {
+      "samples": [
+        "27",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "29": {
+    "inputs": {
+      "filename_prefix": "CharSheet-02_back",
+      "images": [
+        "28",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 02 - Back View (背面全身)"
+    }
+  },
+  "30": {
+    "inputs": {
+      "value": "Show the character in a full body left side profile view, character facing to the left, neutral standing pose, showing the complete left side silhouette from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "03 - Left Side Profile (左側面)"
+    }
+  },
+  "31": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "32": {
+    "inputs": {
+      "pixels": [
+        "31",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "33": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "34": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "35": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "34",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "36": {
+    "inputs": {
+      "prompt": [
+        "30",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "37": {
+    "inputs": {
+      "seed": 81046325773124,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "35",
+        0
+      ],
+      "positive": [
+        "36",
+        0
+      ],
+      "negative": [
+        "33",
+        0
+      ],
+      "latent_image": [
+        "32",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "38": {
+    "inputs": {
+      "samples": [
+        "37",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "39": {
+    "inputs": {
+      "filename_prefix": "CharSheet-03_left_side",
+      "images": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 03 - Left Side Profile (左側面)"
+    }
+  },
+  "40": {
+    "inputs": {
+      "value": "Show the character in a full body right side profile view, character facing to the right, neutral standing pose, showing the complete right side silhouette from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "04 - Right Side Profile (右側面)"
+    }
+  },
+  "41": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "42": {
+    "inputs": {
+      "pixels": [
+        "41",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "43": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "44": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "45": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "44",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "46": {
+    "inputs": {
+      "prompt": [
+        "40",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "41",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "47": {
+    "inputs": {
+      "seed": 314060504082306,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "45",
+        0
+      ],
+      "positive": [
+        "46",
+        0
+      ],
+      "negative": [
+        "43",
+        0
+      ],
+      "latent_image": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "48": {
+    "inputs": {
+      "samples": [
+        "47",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "49": {
+    "inputs": {
+      "filename_prefix": "CharSheet-04_right_side",
+      "images": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 04 - Right Side Profile (右側面)"
+    }
+  },
+  "50": {
+    "inputs": {
+      "value": "Show the character from a 3/4 front-left angle, neutral standing pose, showing both front and left side details, full body visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "05 - 3/4 Front Left (前方左3/4)"
+    }
+  },
+  "51": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "52": {
+    "inputs": {
+      "pixels": [
+        "51",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "53": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "51",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "54": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "55": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "54",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "56": {
+    "inputs": {
+      "prompt": [
+        "50",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "51",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "57": {
+    "inputs": {
+      "seed": 487163407764868,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "55",
+        0
+      ],
+      "positive": [
+        "56",
+        0
+      ],
+      "negative": [
+        "53",
+        0
+      ],
+      "latent_image": [
+        "52",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "58": {
+    "inputs": {
+      "samples": [
+        "57",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "59": {
+    "inputs": {
+      "filename_prefix": "CharSheet-05_3q_front_left",
+      "images": [
+        "58",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 05 - 3/4 Front Left (前方左3/4)"
+    }
+  },
+  "60": {
+    "inputs": {
+      "value": "Show the character from a 3/4 front-right angle, neutral standing pose, showing both front and right side details, full body visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "06 - 3/4 Front Right (前方右3/4)"
+    }
+  },
+  "61": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "62": {
+    "inputs": {
+      "pixels": [
+        "61",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "63": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "64": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "65": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "64",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "66": {
+    "inputs": {
+      "prompt": [
+        "60",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "67": {
+    "inputs": {
+      "seed": 309190190893490,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "65",
+        0
+      ],
+      "positive": [
+        "66",
+        0
+      ],
+      "negative": [
+        "63",
+        0
+      ],
+      "latent_image": [
+        "62",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "68": {
+    "inputs": {
+      "samples": [
+        "67",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "69": {
+    "inputs": {
+      "filename_prefix": "CharSheet-06_3q_front_right",
+      "images": [
+        "68",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 06 - 3/4 Front Right (前方右3/4)"
+    }
+  },
+  "70": {
+    "inputs": {
+      "value": "Show the character from a 3/4 back-left angle, neutral standing pose, showing back and left side details, full body visible from head to toe, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "07 - 3/4 Back Left (後方左3/4)"
+    }
+  },
+  "71": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "72": {
+    "inputs": {
+      "pixels": [
+        "71",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "73": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "71",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "74": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "75": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "76": {
+    "inputs": {
+      "prompt": [
+        "70",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "71",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "77": {
+    "inputs": {
+      "seed": 383786667628272,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "75",
+        0
+      ],
+      "positive": [
+        "76",
+        0
+      ],
+      "negative": [
+        "73",
+        0
+      ],
+      "latent_image": [
+        "72",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "78": {
+    "inputs": {
+      "samples": [
+        "77",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "79": {
+    "inputs": {
+      "filename_prefix": "CharSheet-07_3q_back_left",
+      "images": [
+        "78",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 07 - 3/4 Back Left (後方左3/4)"
+    }
+  },
+  "80": {
+    "inputs": {
+      "value": "Show the character face in a close-up portrait, straight-on view toward the camera, neutral expression, face and upper body visible, showing all facial features and hair details clearly, on a plain white background, no background elements, no scenery, no environment, clean white studio backdrop"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "08 - Expression Close-up (表情アップ)"
+    }
+  },
+  "81": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "109",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "画像を総ピクセルにスケール"
+    }
+  },
+  "82": {
+    "inputs": {
+      "pixels": [
+        "81",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAEエンコード"
+    }
+  },
+  "83": {
+    "inputs": {
+      "prompt": "background, scenery, landscape, environment, nature, buildings, sky, ground, floor, wall, furniture",
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "81",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Negative"
+    }
+  },
+  "84": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "モデルサンプリングオーラフロー"
+    }
+  },
+  "85": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "84",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFG正規化"
+    }
+  },
+  "86": {
+    "inputs": {
+      "prompt": [
+        "80",
+        0
+      ],
+      "clip": [
+        "3",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ],
+      "image1": [
+        "81",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Positive"
+    }
+  },
+  "87": {
+    "inputs": {
+      "seed": 121084260397941,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "85",
+        0
+      ],
+      "positive": [
+        "86",
+        0
+      ],
+      "negative": [
+        "83",
+        0
+      ],
+      "latent_image": [
+        "82",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Kサンプラー"
+    }
+  },
+  "88": {
+    "inputs": {
+      "samples": [
+        "87",
+        0
+      ],
+      "vae": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAEデコード"
+    }
+  },
+  "89": {
+    "inputs": {
+      "filename_prefix": "CharSheet-08_expression",
+      "images": [
+        "88",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - 08 - Expression Close-up (表情アップ)"
+    }
+  },
+  "101": {
+    "inputs": {
+      "image1": [
+        "18",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 8,
+      "spacing_color": "white",
+      "image2": [
+        "28",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Row1: v1+v2"
+    }
+  },
+  "102": {
+    "inputs": {
+      "image1": [
+        "101",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 8,
+      "spacing_color": "white",
+      "image2": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Row1: +v3"
+    }
+  },
+  "103": {
+    "inputs": {
+      "image1": [
+        "102",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 8,
+      "spacing_color": "white",
+      "image2": [
+        "48",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Row1: +v4 (complete)"
+    }
+  },
+  "104": {
+    "inputs": {
+      "image1": [
+        "58",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 8,
+      "spacing_color": "white",
+      "image2": [
+        "68",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Row2: v5+v6"
+    }
+  },
+  "105": {
+    "inputs": {
+      "image1": [
+        "104",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 8,
+      "spacing_color": "white",
+      "image2": [
+        "78",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Row2: +v7"
+    }
+  },
+  "106": {
+    "inputs": {
+      "image1": [
+        "105",
+        0
+      ],
+      "direction": "right",
+      "match_image_size": true,
+      "spacing_width": 8,
+      "spacing_color": "white",
+      "image2": [
+        "88",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Row2: +v8 (complete)"
+    }
+  },
+  "107": {
+    "inputs": {
+      "image1": [
+        "103",
+        0
+      ],
+      "direction": "down",
+      "match_image_size": false,
+      "spacing_width": 12,
+      "spacing_color": "white",
+      "image2": [
+        "106",
+        0
+      ]
+    },
+    "class_type": "ImageStitch",
+    "_meta": {
+      "title": "Final Card: Row1+Row2"
+    }
+  },
+  "108": {
+    "inputs": {
+      "filename_prefix": "CharSheet-CARD",
+      "images": [
+        "107",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save - Character Card (4x2)"
+    }
+  },
+  "109": {
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "detail_range": 8,
+      "black_point": 0.01,
+      "white_point": 0.99,
+      "process_detail": true
+    },
+    "class_type": "LayerMask: RemBgUltra",
+    "_meta": {
+      "title": "RemBg Ultra (背景削除)"
+    }
+  }
+}
