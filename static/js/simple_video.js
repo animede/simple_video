@@ -560,6 +560,8 @@ const SimpleVideoUI = {
 
         // Whether to use characterSheetImage as the primary scene I2I reference instead of characterImage
         useCharSheetAsRef: false,
+        // Workflow to use when charsheet is active reference (can differ from main i2iRefineWorkflow)
+        charSheetRefWorkflow: 'qwen_i2i_2511_bf16_lightning4',
 
         // Prepared initial frame for VIDEO generation (reference image + scene prompt -> image)
         // Used by the Video Generate button when available.
@@ -766,6 +768,7 @@ function loadSimpleVideoState() {
 
             // Whether to use character sheet as scene I2I reference
             SimpleVideoUI.state.useCharSheetAsRef = !!parsed.useCharSheetAsRef;
+            SimpleVideoUI.state.charSheetRefWorkflow = String(parsed.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4');
         }
     } catch (_e) {
         console.warn('[SimpleVideo] Failed to load state');
@@ -1174,6 +1177,7 @@ function saveSimpleVideoState() {
             // Character sheet image (generated via キャラクターシートを生成)
             characterSheetImage: SimpleVideoUI.state.characterSheetImage,
             useCharSheetAsRef: !!SimpleVideoUI.state.useCharSheetAsRef,
+            charSheetRefWorkflow: String(SimpleVideoUI.state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4'),
 
             // Background removal options
             removeBgBeforeGenerate: !!SimpleVideoUI.state.removeBgBeforeGenerate,
@@ -1774,6 +1778,14 @@ function renderSimpleVideoUI() {
             <div id="simpleVideoInternalImagesContent">
                 <div class="simple-video-hint">自動生成・準備済みの内部参照画像（確認・クリア用）。✕で個別削除できます。</div>
                 <div id="simpleVideoInternalImagesGrid"></div>
+                <div id="simpleVideoCharSheetWorkflowRow" class="simple-video-charsheet-workflow-row" style="display:none;">
+                    <label for="simpleVideoCharSheetWorkflowSelect">🔧 参照モデル:</label>
+                    <select id="simpleVideoCharSheetWorkflowSelect" class="simple-video-select">
+                        <option value="qwen_i2i_2511_bf16_lightning4">2511 EDIT 4-step（編集モード）</option>
+                        <option value="qwen_i2i_2512_lightning4">2512 I2I 4-step（高品質）</option>
+                    </select>
+                    <span class="simple-video-hint" id="simpleVideoCharSheetWorkflowHint"></span>
+                </div>
             </div>
         </div>
 
@@ -2260,6 +2272,16 @@ function attachSimpleVideoEventListeners() {
         charSheetNobgCheck.addEventListener('change', () => {
             SimpleVideoUI.state.charSheetNobg = charSheetNobgCheck.checked;
             saveSimpleVideoState();
+        });
+    }
+
+    // Charsheet reference workflow selector
+    const charSheetWorkflowSelect = document.getElementById('simpleVideoCharSheetWorkflowSelect');
+    if (charSheetWorkflowSelect) {
+        charSheetWorkflowSelect.addEventListener('change', () => {
+            SimpleVideoUI.state.charSheetRefWorkflow = charSheetWorkflowSelect.value;
+            saveSimpleVideoState();
+            updateInternalImagesUI();
         });
     }
 
@@ -6187,6 +6209,20 @@ function updateInternalImagesUI() {
             </div>`;
         })
         .join('');
+
+    // Show/hide charsheet workflow selector row
+    const charSheetWorkflowRow = document.getElementById('simpleVideoCharSheetWorkflowRow');
+    if (charSheetWorkflowRow) {
+        charSheetWorkflowRow.style.display = state.useCharSheetAsRef ? '' : 'none';
+        const sel = document.getElementById('simpleVideoCharSheetWorkflowSelect');
+        if (sel) sel.value = state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4';
+        const hint = document.getElementById('simpleVideoCharSheetWorkflowHint');
+        if (hint) {
+            hint.textContent = (state.charSheetRefWorkflow === 'qwen_i2i_2512_lightning4')
+                ? '2512: プロンプトのみで生成。キャラ外見を保持しない場合はdenoise/CFGを調整'
+                : '2511: EDITモード。プロンプトに従いつつキャラ外見を参照絵から反映';
+        }
+    }
 }
 
 function renderSimpleVideoIntermediateImagesUI() {
@@ -8477,7 +8513,11 @@ async function startIntermediateImageGeneration(options = {}) {
 
         // Determine ref3 usage for scene I2I
         const { ref3Active, ref3Mode, adjustedWorkflow: i2iWorkflowFromRef3 } = computeRef3SceneI2IConfig(i2iWorkflowBase);
-        const i2iWorkflow = i2iWorkflowFromRef3;
+        let i2iWorkflow = i2iWorkflowFromRef3;
+        // When charsheet is active reference, use its own dedicated workflow
+        if (state.useCharSheetAsRef && !!state.characterSheetImage?.filename) {
+            i2iWorkflow = normalizeWorkflowAlias(state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4');
+        }
 
         const missingIndexes = [];
         for (let i = 0; i < sceneCount; i++) {
@@ -8627,7 +8667,8 @@ async function startIntermediateImageGeneration(options = {}) {
 
             // When using character sheet as reference, prepend hint before wrap so
             // wrapQwen2511EditInstructionPrompt detects 'picture 1' and skips 'Preserve composition'.
-            if (usesCharacterImage && useSheetAsRef) {
+            // For 2512 I2I mode, the charsheet hint is not injected (pass prompt as-is).
+            if (usesCharacterImage && useSheetAsRef && isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
                 params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
             }
 
@@ -10667,7 +10708,11 @@ async function startGeneration() {
 
             // ref3 scene I2I config
             const { ref3Active, ref3Mode, adjustedWorkflow: i2iWorkflowFromRef3d } = computeRef3SceneI2IConfig(i2iWorkflowBase);
-            const i2iWorkflow = i2iWorkflowFromRef3d;
+            let i2iWorkflow = i2iWorkflowFromRef3d;
+            // If charsheet is active reference, use its dedicated workflow
+            if (state.useCharSheetAsRef && !!state.characterSheetImage?.filename) {
+                i2iWorkflow = normalizeWorkflowAlias(state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4');
+            }
 
             // FLF品質設定: speed=4-step(高速), quality=20-step(高品質)
             const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
@@ -10957,7 +11002,11 @@ async function startGeneration() {
 
             // ref3 scene I2I config
             const { ref3Active, ref3Mode, adjustedWorkflow: i2iWorkflowFromRef3e } = computeRef3SceneI2IConfig(i2iWorkflowBase);
-            const i2iWorkflow = i2iWorkflowFromRef3e;
+            let i2iWorkflow = i2iWorkflowFromRef3e;
+            // If charsheet is active reference, use its dedicated workflow
+            if (state.useCharSheetAsRef && !!state.characterSheetImage?.filename) {
+                i2iWorkflow = normalizeWorkflowAlias(state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4');
+            }
 
             // FLF品質設定: speed=4-step(高速), quality=20-step(高品質)
             const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
@@ -11041,8 +11090,8 @@ async function startGeneration() {
                     if (hint) params.prompt = hint + '\n' + params.prompt;
                 }
 
-                // When using character sheet as reference, prepend hint before wrap.
-                if (useSheetAsRef2) {
+                // When using character sheet as reference, prepend hint before wrap (EDIT mode only).
+                if (useSheetAsRef2 && isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
                     params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
                 }
 
@@ -11254,7 +11303,11 @@ async function startGeneration() {
 
             // ref3 scene I2I config
             const { ref3Active, ref3Mode, adjustedWorkflow: i2iWorkflowFromRef3c } = computeRef3SceneI2IConfig(i2iWorkflowBase);
-            const i2iWorkflow = i2iWorkflowFromRef3c;
+            let i2iWorkflow = i2iWorkflowFromRef3c;
+            // If charsheet is active reference, use its dedicated workflow
+            if (state.useCharSheetAsRef && !!state.characterSheetImage?.filename) {
+                i2iWorkflow = normalizeWorkflowAlias(state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4');
+            }
 
             // I2V workflow (LTX option applies here since no FLF)
             const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
@@ -11335,8 +11388,8 @@ async function startGeneration() {
                     if (hint) params.prompt = hint + '\n' + params.prompt;
                 }
 
-                // When using character sheet as reference, prepend hint before wrap.
-                if (useSheetAsRef3) {
+                // When using character sheet as reference, prepend hint before wrap (EDIT mode only).
+                if (useSheetAsRef3 && isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
                     params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
                 }
 

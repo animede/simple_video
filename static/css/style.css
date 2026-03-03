@@ -7432,6 +7432,25 @@ body.simple-video-enabled #simpleVideoLeft {
     border-color: rgba(129, 140, 248, 0.45);
     background: rgba(129, 140, 248, 0.04);
 }
+
+/* Charsheet ref workflow selector row */
+.simple-video-charsheet-workflow-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px 4px;
+    flex-wrap: wrap;
+}
+.simple-video-charsheet-workflow-row > label {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.simple-video-charsheet-workflow-row .simple-video-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 0;
+}
 /* ──────────────────────────────────────────────────────────────── */
 
 .simple-video-drop-slot {
