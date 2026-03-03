@@ -749,6 +749,7 @@ function loadSimpleVideoState() {
 
             // Character composite image for char_edit_i2i_flf preset
             SimpleVideoUI.state.characterImage = normalizeCharacterImage(parsed.characterImage);
+            SimpleVideoUI.state.characterSheetImage = normalizeCharacterImage(parsed.characterSheetImage);
             SimpleVideoUI.state.characterImageEditPrompt = String(parsed.characterImageEditPrompt || '');
             // Reference source for scene I2I: 'character' (use character image) or 'first_scene' (use scene 1 image)
             SimpleVideoUI.state.i2iRefSource = normalizeI2IRefSource(parsed.i2iRefSource);
