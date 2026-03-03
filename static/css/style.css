@@ -7374,6 +7374,42 @@ body.simple-video-enabled #simpleVideoLeft {
     color: #fff;
     border-color: rgba(220, 50, 50, 0.80);
 }
+
+/* Use-as-reference toggle button (shown on characterImage / characterSheetImage items) */
+.simple-video-internal-image-use-ref {
+    display: inline-block;
+    margin-top: 5px;
+    padding: 2px 9px;
+    font-size: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.simple-video-internal-image-use-ref:not(.static):hover {
+    border-color: rgba(129, 140, 248, 0.5);
+    background: rgba(129, 140, 248, 0.10);
+    color: #a5b4fc;
+}
+.simple-video-internal-image-use-ref.active {
+    border-color: #818cf8;
+    background: rgba(129, 140, 248, 0.18);
+    color: #818cf8;
+    font-weight: 600;
+}
+.simple-video-internal-image-use-ref.static {
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Active-ref item gets a subtle colored border */
+.simple-video-internal-image-item.active-ref {
+    border-color: rgba(129, 140, 248, 0.45);
+    background: rgba(129, 140, 248, 0.04);
+}
 /* ──────────────────────────────────────────────────────────────── */
 
 .simple-video-drop-slot {

@@ -557,6 +557,9 @@ const SimpleVideoUI = {
         // Whether to run RMBG preprocessing + use no-bg workflow for character sheet generation
         charSheetNobg: false,
 
+        // Whether to use characterSheetImage as the primary scene I2I reference instead of characterImage
+        useCharSheetAsRef: false,
+
         // Prepared initial frame for VIDEO generation (reference image + scene prompt -> image)
         // Used by the Video Generate button when available.
         preparedVideoInitialImage: null, // { jobId, filename, prompt, presetId }
@@ -757,6 +760,9 @@ function loadSimpleVideoState() {
 
             // Character sheet no-bg option
             SimpleVideoUI.state.charSheetNobg = !!parsed.charSheetNobg;
+
+            // Whether to use character sheet as scene I2I reference
+            SimpleVideoUI.state.useCharSheetAsRef = !!parsed.useCharSheetAsRef;
         }
     } catch (_e) {
         console.warn('[SimpleVideo] Failed to load state');
@@ -1160,7 +1166,15 @@ function saveSimpleVideoState() {
             characterImage: SimpleVideoUI.state.characterImage,
             characterImageEditPrompt: String(SimpleVideoUI.state.characterImageEditPrompt || ''),
             i2iRefSource: String(SimpleVideoUI.state.i2iRefSource || 'character'),
-            
+
+            // Character sheet image (generated via キャラクターシートを生成)
+            characterSheetImage: SimpleVideoUI.state.characterSheetImage,
+            useCharSheetAsRef: !!SimpleVideoUI.state.useCharSheetAsRef,
+
+            // Background removal options
+            removeBgBeforeGenerate: !!SimpleVideoUI.state.removeBgBeforeGenerate,
+            charSheetNobg: !!SimpleVideoUI.state.charSheetNobg,
+
             // Key image analysis (VLM)
             keyImageAnalysis: SimpleVideoUI.state.keyImageAnalysis || null,
             keyImageAnalysisRaw: SimpleVideoUI.state.keyImageAnalysisRaw || null,
@@ -3036,6 +3050,19 @@ function attachSimpleVideoEventListeners() {
                 updateInternalImagesUI();
                 updateGenerateButtonState();
                 if (typeof showToast === 'function') showToast(`${label}をクリアしました`, 'info');
+                return;
+            }
+
+            // "Use as reference" toggle — select characterImage or characterSheetImage as scene I2I reference
+            const useRefBtn = e.target.closest('.simple-video-internal-image-use-ref');
+            if (useRefBtn && !useRefBtn.classList.contains('static')) {
+                e.preventDefault();
+                const key = useRefBtn.dataset.key;
+                SimpleVideoUI.state.useCharSheetAsRef = (key === 'characterSheetImage');
+                saveSimpleVideoState();
+                updateInternalImagesUI();
+                const label = key === 'characterSheetImage' ? 'キャラクターシート' : 'キャラクター合成画像';
+                if (typeof showToast === 'function') showToast(`シーンI2I参照: ${label} を使用します`, 'info');
                 return;
             }
 
@@ -6065,6 +6092,12 @@ function updateInternalImagesUI() {
     }
 
     wrap.style.display = '';
+
+    // Determine which items support the "use as scene I2I reference" toggle
+    const hasCharImage  = activeItems.some((i) => i.key === 'characterImage');
+    const hasSheetImage = activeItems.some((i) => i.key === 'characterSheetImage');
+    const hasBothRefItems = hasCharImage && hasSheetImage;
+
     grid.innerHTML = activeItems
         .map((item) => {
             const v = item.value;
@@ -6074,8 +6107,26 @@ function updateInternalImagesUI() {
             const promptSnippet = p
                 ? escapeHtml(p.length > 80 ? p.substring(0, 80) + '…' : p)
                 : '';
+
+            // "Use as reference" toggle — shown on characterImage and characterSheetImage
+            const isRefItem = item.key === 'characterImage' || item.key === 'characterSheetImage';
+            const isActiveRef = isRefItem && (
+                (item.key === 'characterSheetImage' &&  state.useCharSheetAsRef) ||
+                (item.key === 'characterImage'       && !state.useCharSheetAsRef)
+            );
+            let refBadgeHtml = '';
+            if (isRefItem) {
+                if (hasBothRefItems) {
+                    // Both exist: show clickable toggle
+                    refBadgeHtml = `<button class="simple-video-internal-image-use-ref${isActiveRef ? ' active' : ''}" data-key="${escapeHtml(item.key)}" type="button" title="シーンI2I参照として優先使用">${isActiveRef ? '📌 参照中' : '参照に使用'}</button>`;
+                } else {
+                    // Only one: always active, show static badge
+                    refBadgeHtml = `<span class="simple-video-internal-image-use-ref active static">📌 参照中</span>`;
+                }
+            }
+
             return `
-            <div class="simple-video-internal-image-item" data-key="${escapeHtml(item.key)}">
+            <div class="simple-video-internal-image-item${isActiveRef ? ' active-ref' : ''}" data-key="${escapeHtml(item.key)}">
                 <div class="simple-video-internal-image-thumb-wrap" title="クリックで拡大">
                     <img class="simple-video-internal-image-thumb" src="${escapeHtml(imgUrl)}" alt="${escapeHtml(item.label)}" loading="eager" />
                 </div>
@@ -6083,6 +6134,7 @@ function updateInternalImagesUI() {
                     <div class="simple-video-internal-image-label">${escapeHtml(item.icon)} ${escapeHtml(item.label)}</div>
                     <div class="simple-video-internal-image-filename" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
                     ${promptSnippet ? `<div class="simple-video-internal-image-prompt">${promptSnippet}</div>` : ''}
+                    ${refBadgeHtml}
                 </div>
                 <button class="simple-video-internal-image-clear" data-key="${escapeHtml(item.key)}" type="button" title="${escapeHtml(item.label)}をクリア">✕</button>
             </div>`;
@@ -8417,11 +8469,15 @@ async function startIntermediateImageGeneration(options = {}) {
         }
 
         // For presets that need a character composite image, determine reference source.
-        // If character composite image exists, use it; otherwise fall back to key image / dropSlots[0].
+        // If useCharSheetAsRef is set and characterSheetImage exists, use it; otherwise fall back to characterImage / key image / dropSlots[0].
         const usesCharacterImage = !!preset.requiresCharacterImage;
+        const useSheetAsRef = usesCharacterImage && state.useCharSheetAsRef && !!state.characterSheetImage?.filename;
         let effectiveRefImage = null;
         if (usesCharacterImage) {
-            if (state.characterImage?.filename) {
+            if (useSheetAsRef) {
+                effectiveRefImage = state.characterSheetImage.filename;
+                console.log('[SimpleVideo] useCharSheetAsRef=true: キャラクターシートを参照に使用');
+            } else if (state.characterImage?.filename) {
                 effectiveRefImage = state.characterImage.filename;
             } else if (state.uploadedImage?.filename) {
                 effectiveRefImage = state.uploadedImage.filename;
@@ -8489,7 +8545,12 @@ async function startIntermediateImageGeneration(options = {}) {
                 }
             }
             params.prompt = finalExpandedPrompt;
-            
+
+            // When using character sheet as scene I2I reference, prepend a descriptive hint.
+            if (usesCharacterImage && useSheetAsRef) {
+                params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
+            }
+
             // For presets using character image (char_edit_i2i_flf, char_edit_i2v_scene_cut),
             // use character composite image (or fallback ref) as reference with refSource logic.
             if (usesCharacterImage) {
@@ -9759,6 +9820,15 @@ function computeRef3SceneI2IConfig(baseWorkflow) {
 }
 
 /**
+ * Build a prompt hint indicating the reference image is a multi-angle character sheet.
+ * Prepend this to scene prompts when useCharSheetAsRef is active.
+ * @returns {string} hint text to prepend to prompt
+ */
+function buildCharSheetRefPromptHint() {
+    return 'The reference image is a multi-angle character sheet showing the character from multiple views (front, back, side, etc.). Use it as the character identity and appearance reference to maintain consistent character design throughout the scene.';
+}
+
+/**
  * Build ref3 prompt hint based on mode.
  * @param {string} ref3Mode - 'background' | 'style' | 'anime'
  * @param {number|null} ref3PictureNum - Picture N number for ref3, or null
@@ -10846,8 +10916,8 @@ async function startGeneration() {
             // if character image is not registered, use key image (or ref1) as reference only for this run.
             const ds = Array.isArray(state.dropSlots) ? state.dropSlots : [];
             const fallbackRefImage = String(state.uploadedImage?.filename || '').trim() || String(ds[0]?.filename || '').trim();
-            if (missingCount > 0 && !state.characterImage?.filename && !fallbackRefImage) {
-                throw new Error('参照画像がありません（キャラ画像・キー画像・ref1 のいずれかを用意してください）');
+            if (missingCount > 0 && !state.characterImage?.filename && !state.characterSheetImage?.filename && !fallbackRefImage) {
+                throw new Error('参照画像がありません（キャラ画像・キャラクターシート・キー画像・ref1 のいずれかを用意してください）');
             }
 
             const imageJobsToRun = Math.max(0, missingCount);
@@ -10860,8 +10930,12 @@ async function startGeneration() {
             const sceneImages = [];
             const sceneImagePrompts = []; // Track prompts synchronized with sceneImages
             let stepCursor = 0;
-            
-            const characterImageFilename = state.characterImage?.filename || fallbackRefImage || null;
+
+            // Determine effective reference: character sheet takes priority when useCharSheetAsRef is set
+            const useSheetAsRef2 = state.useCharSheetAsRef && !!state.characterSheetImage?.filename;
+            const characterImageFilename = useSheetAsRef2
+                ? state.characterSheetImage.filename
+                : (state.characterImage?.filename || fallbackRefImage || null);
             const refSource = normalizeI2IRefSource(state.i2iRefSource);
             let firstSceneImageFilename = null;
 
@@ -10898,6 +10972,11 @@ async function startGeneration() {
 
                 params.prompt = scenePrompt;
                 params.input_image = refForThisScene;
+
+                // When using character sheet as reference, prepend descriptive hint
+                if (useSheetAsRef2) {
+                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
+                }
 
                 // ref3: add as input_image_2 and inject prompt hint
                 if (ref3Active && state.dropSlots?.[2]?.filename) {
@@ -10940,7 +11019,6 @@ async function startGeneration() {
                     filename,
                     jobId: String(res.jobId),
                     prompt: String(params.prompt || ''),
-                    rawPrompt: scenePrompt,
                     rawPrompt: scenePrompt,
                     previewUrl: getSimpleVideoDownloadURL(res.jobId, filename),
                 };
@@ -11133,8 +11211,8 @@ async function startGeneration() {
             // If I2I generation is needed, require at least one usable reference image.
             const ds = Array.isArray(state.dropSlots) ? state.dropSlots : [];
             const fallbackRefImage = String(state.uploadedImage?.filename || '').trim() || String(ds[0]?.filename || '').trim();
-            if (missingCount > 0 && !state.characterImage?.filename && !fallbackRefImage) {
-                throw new Error('参照画像がありません（キー画像・キャラ画像・ref1 のいずれかを用意してください）');
+            if (missingCount > 0 && !state.characterImage?.filename && !state.characterSheetImage?.filename && !fallbackRefImage) {
+                throw new Error('参照画像がありません（キャラ画像・キャラクターシート・キー画像・ref1 のいずれかを用意してください）');
             }
 
             const imageJobsToRun = Math.max(0, missingCount);
@@ -11146,8 +11224,12 @@ async function startGeneration() {
             const sceneVideoBasenames = [];
             const sceneImages = [];
             let stepCursor = 0;
-            
-            const characterImageFilename = state.characterImage?.filename || fallbackRefImage || null;
+
+            // Determine effective reference: character sheet takes priority when useCharSheetAsRef is set
+            const useSheetAsRef3 = state.useCharSheetAsRef && !!state.characterSheetImage?.filename;
+            const characterImageFilename = useSheetAsRef3
+                ? state.characterSheetImage.filename
+                : (state.characterImage?.filename || fallbackRefImage || null);
             const refSource = normalizeI2IRefSource(state.i2iRefSource);
             let firstSceneImageFilename = null;
 
@@ -11183,6 +11265,11 @@ async function startGeneration() {
 
                 params.prompt = scenePrompt;
                 params.input_image = refForThisScene;
+
+                // When using character sheet as reference, prepend descriptive hint
+                if (useSheetAsRef3) {
+                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
+                }
 
                 // ref3: add as input_image_2 and inject prompt hint
                 if (ref3Active && state.dropSlots?.[2]?.filename) {
