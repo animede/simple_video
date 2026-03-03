@@ -1967,6 +1967,25 @@ async def on_startup() -> None:
     REF_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     await job_manager.start()
 
+    _sep = "─" * 56
+    print(f"\n{_sep}")
+    print("  simple_video_app  起動設定")
+    print(_sep)
+    print(f"  ComfyUI サーバー  : http://{COMFYUI_SERVER}")
+    print(f"  ComfyUI ディレクトリ: {_comfyui_dir or '(自動検出されず)'}")
+    print(f"  ComfyUI input/   : {COMFY_INPUT_DIR}")
+    print(f"  ComfyUI output/  : {COMFY_OUTPUT_DIR}")
+    print(_sep)
+    print(f"  LLM  (テキスト)  : {OPENAI_BASE_URL}")
+    print(f"  LLM  モデル       : {os.environ.get('OPENAI_CHAT_MODEL', '(env: OPENAI_CHAT_MODEL 未設定)')}")
+    _vlm_url = VLM_BASE_URL if VLM_BASE_URL != OPENAI_BASE_URL else f"{VLM_BASE_URL}  (LLM と同一)"
+    print(f"  VLM  (画像解析)  : {_vlm_url}")
+    print(f"  VLM  モデル       : {VLM_MODEL}")
+    print(_sep)
+    print(f"  ワークフロー      : {WORKFLOWS_DIR}  ({sum(1 for _ in WORKFLOWS_DIR.glob('*.json'))} 件)")
+    print(f"  アプリ データ     : {APP_DATA_DIR}")
+    print(f"{_sep}\n")
+
 
 def _safe_name(filename: str) -> str:
     raw = Path(str(filename or "upload.bin")).name
