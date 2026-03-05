@@ -1037,6 +1037,40 @@ function normalizeScenarioVariation(value) {
     return 'auto';
 }
 
+function isLikelyCharacterSheetFilename(filename) {
+    const name = String(filename || '').toLowerCase();
+    if (!name) return false;
+    return /(character[_-]?sheet|sheet[_-]?card|char[_-]?sheet|model[_-]?sheet|turnaround)/i.test(name);
+}
+
+function resolveSceneReferenceImageForRun(state, options = {}) {
+    const preferCharacter = options.preferCharacter !== false;
+    const ds = Array.isArray(state?.dropSlots) ? state.dropSlots : [];
+
+    const characterImage = String(state?.characterImage?.filename || '').trim();
+    const keyImage = String(state?.uploadedImage?.filename || '').trim();
+    const preparedVideoInitial = String(state?.preparedVideoInitialImage?.filename || '').trim();
+    const ref1 = String(ds[0]?.filename || '').trim();
+
+    const chain = preferCharacter
+        ? [
+            { filename: characterImage, source: 'characterImage' },
+            { filename: keyImage || preparedVideoInitial, source: 'keyImage' },
+            { filename: ref1, source: 'ref1' },
+        ]
+        : [
+            { filename: keyImage || preparedVideoInitial, source: 'keyImage' },
+            { filename: ref1, source: 'ref1' },
+            { filename: characterImage, source: 'characterImage' },
+        ];
+
+    for (const item of chain) {
+        const fn = String(item.filename || '').trim();
+        if (fn) return { filename: fn, source: item.source };
+    }
+    return { filename: '', source: 'none' };
+}
+
 function isContinuousLongPreset(presetId) {
     const pid = String(presetId || '').trim();
     return pid === 'char_i2i_flf' || pid === 'char_edit_i2i_flf';
@@ -1800,6 +1834,9 @@ function renderSimpleVideoUI() {
 
             <div class="simple-video-hint" id="simpleVideoI2IRefRoleHint" style="display:none;">画像リファイン（I2I）で「参照画像」を何として扱うかを選択します。キャラ一貫性は人物/服/髪などを固定しやすく、雰囲気維持は画調/ライティング/色を固定しやすい。</div>
             <div class="simple-video-hint" id="simpleVideoCurrentRefHint">参照: -</div>
+            <div class="simple-video-current-ref-preview" id="simpleVideoCurrentRefPreview" style="display:none;" aria-label="現在参照中の画像プレビュー">
+                <img id="simpleVideoCurrentRefPreviewImg" alt="current reference" />
+            </div>
 
             <div class="simple-video-advanced-settings" id="simpleVideoAdvancedSettings" style="display:none;">
                 <div class="simple-video-form-row">
@@ -3720,6 +3757,7 @@ function applySimpleVideoPromptGuardrails(prompts, options = {}) {
     const hasCharacterRef = !!options.hasCharacterRef;
     const lineartSpecialMode = !!options.lineartSpecialMode;
     const pixelSpecialMode = !!options.pixelSpecialMode;
+    const hasCharacterSheetRef = !!options.hasCharacterSheetRef;
 
     const splitLayoutRegexes = [
         /split\s*[- ]?screen/gi,
@@ -3754,6 +3792,7 @@ function applySimpleVideoPromptGuardrails(prompts, options = {}) {
     let lineartFixCount = 0;
     let pixelFixCount = 0;
     let duplicateFixCount = 0;
+    let sheetLayoutFixCount = 0;
 
     const guarded = list.map((raw) => {
         let prompt = String(raw || '').trim();
@@ -3771,8 +3810,9 @@ function applySimpleVideoPromptGuardrails(prompts, options = {}) {
         const needsContinuity = (characterToken || hasCharacterRef)
             && !/keep\s+the\s+same\s+main\s+subject|subject\s+identity\s+consistent|reference-image\s+lock/i.test(prompt);
         const needsNoDuplicate = !/exactly\s+one\s+primary\s+subject|no\s+duplicate\s+character|no\s+cloned\s+duplicates|single\s+main\s+subject\s+instance/i.test(prompt);
+        const needsNoSheetLayout = hasCharacterSheetRef && !/do\s+not\s+render\s+character\s+sheet|no\s+contact\s+sheet|no\s+turnaround\s+sheet|do\s+not\s+draw\s+multiple\s+poses/i.test(prompt);
 
-        if (needsSingleFrame || needsContinuity || needsNoDuplicate) {
+        if (needsSingleFrame || needsContinuity || needsNoDuplicate || needsNoSheetLayout) {
             const suffixParts = [];
             if (needsSingleFrame) {
                 suffixParts.push('Single full-frame composition only; no split-screen, collage, or multi-panel layout.');
@@ -3792,6 +3832,11 @@ function applySimpleVideoPromptGuardrails(prompts, options = {}) {
                 suffixParts.push('Exactly one primary subject instance in frame unless crowd/group is explicitly requested.');
                 suffixParts.push('No duplicate character clones in one frame.');
                 duplicateFixCount += 1;
+            }
+            if (needsNoSheetLayout) {
+                suffixParts.push('Do not render character sheet, contact sheet, model sheet, turnaround sheet, or multi-pose lineup in the final image.');
+                suffixParts.push('Treat character-sheet references as identity/style hints only; output must be a single full-scene shot.');
+                sheetLayoutFixCount += 1;
             }
             prompt = `${prompt} ${suffixParts.join(' ')}`.trim();
         }
@@ -3832,6 +3877,7 @@ function applySimpleVideoPromptGuardrails(prompts, options = {}) {
             lineartFixCount,
             pixelFixCount,
             duplicateFixCount,
+            sheetLayoutFixCount,
             touchedPrompts: guarded.length,
         },
     };
@@ -3972,6 +4018,11 @@ async function generateSimpleVideoPrompts() {
     const hasCharacterRef = !!String(state.characterImage?.filename || '').trim()
         || !!String(state.preparedInitialImage?.filename || '').trim()
         || !!String((Array.isArray(state.dropSlots) ? state.dropSlots[0]?.filename : '') || '').trim();
+    const hasCharacterSheetRef = [
+        state.characterImage?.filename,
+        state.preparedInitialImage?.filename,
+        ...(Array.isArray(state.dropSlots) ? state.dropSlots.map((s) => s?.filename) : []),
+    ].some((fn) => isLikelyCharacterSheetFilename(fn));
     const characterPromptGuard = [];
     if (selectedCharacterToken) {
         characterPromptGuard.push(
@@ -4106,6 +4157,7 @@ async function generateSimpleVideoPrompts() {
         const guardrailResult = applySimpleVideoPromptGuardrails(prompts, {
             characterToken: selectedCharacterToken,
             hasCharacterRef,
+            hasCharacterSheetRef,
             lineartSpecialMode,
             pixelSpecialMode,
         });
@@ -6972,6 +7024,8 @@ async function generateSimpleVideoScenarioFromIdea() {
 
 function updateCurrentReferenceHint() {
     const hintEl = document.getElementById('simpleVideoCurrentRefHint');
+    const previewWrapEl = document.getElementById('simpleVideoCurrentRefPreview');
+    const previewImgEl = document.getElementById('simpleVideoCurrentRefPreviewImg');
     if (!hintEl) return;
 
     const state = SimpleVideoUI.state;
@@ -6979,6 +7033,8 @@ function updateCurrentReferenceHint() {
 
     if (!preset) {
         hintEl.textContent = '参照: 生成シーケンスを選択してください';
+        if (previewWrapEl) previewWrapEl.style.display = 'none';
+        if (previewImgEl) previewImgEl.removeAttribute('src');
         return;
     }
 
@@ -7011,6 +7067,36 @@ function updateCurrentReferenceHint() {
     }
 
     hintEl.textContent = `現在の参照: ${source}${tail}`;
+
+    let previewUrl = '';
+    if (source === 'キャラ画像') {
+        if (String(state.characterImage?.previewUrl || '').trim()) {
+            previewUrl = String(state.characterImage.previewUrl).trim();
+        } else if (String(state.characterImage?.jobId || '').trim() && String(state.characterImage?.filename || '').trim()) {
+            previewUrl = getSimpleVideoDownloadURL(String(state.characterImage.jobId), String(state.characterImage.filename));
+        } else if (String(state.characterImage?.filename || '').trim()) {
+            previewUrl = getSimpleVideoInputImageURL(String(state.characterImage.filename));
+        }
+    } else if (source === 'キー画像') {
+        const keyFilename = String(state.uploadedImage?.filename || '').trim();
+        if (keyFilename) {
+            previewUrl = getSimpleVideoInputImageURL(keyFilename);
+        }
+    } else if (source === 'ref1') {
+        const ref1Filename = String(dropSlots[0]?.filename || '').trim();
+        if (ref1Filename) {
+            previewUrl = getSimpleVideoInputImageURL(ref1Filename);
+        }
+    }
+
+    if (previewWrapEl && previewImgEl && previewUrl) {
+        previewImgEl.src = previewUrl;
+        previewImgEl.title = `現在の参照: ${source}`;
+        previewWrapEl.style.display = '';
+    } else if (previewWrapEl && previewImgEl) {
+        previewWrapEl.style.display = 'none';
+        previewImgEl.removeAttribute('src');
+    }
 }
 
 function escapeHtml(value) {
@@ -7759,8 +7845,9 @@ function updateGenerateButtonState() {
         canGenerate = false;
     }
     
-    // If preset requires character, must have selected character
-    if (preset?.requiresCharacter && !hasCharacterContext) canGenerate = false;
+    // If preset requires character, allow either character context OR any valid reference/intermediate.
+    const hasCharacterFallbackContext = hasAnyRefImage || hasPreparedVideoInitialImage || hasIntermediate;
+    if (preset?.requiresCharacter && !hasCharacterContext && !hasCharacterFallbackContext) canGenerate = false;
 
     // If preset requires character image (char_edit_i2i_flf, char_edit_i2v_scene_cut),
     // it's only strictly needed when intermediate images aren't all ready yet.
@@ -7786,7 +7873,9 @@ function updateGenerateButtonState() {
         const reasons = [];
         if (!preset) reasons.push('生成シーケンスを選択');
         if (!state.scenario.trim()) reasons.push('シナリオを入力');
-        if (preset?.requiresCharacter && !hasCharacterContext) reasons.push('キャラクターを選択 or キャラ画像を生成');
+        if (preset?.requiresCharacter && !hasCharacterContext && !hasCharacterFallbackContext) {
+            reasons.push('キャラクターを選択 / キャラ画像生成 / キー画像(ref1) のいずれかを用意');
+        }
         if (preset?.requiresCharacterImage && !hasAnyRefImage && !hasIntermediate) reasons.push('キー画像/キャラ画像/ref1 のいずれかを用意');
         if (preset?.requiresImage && !hasReferenceImage && !hasPreparedVideoInitialImage && !hasIntermediate) reasons.push('キー画像をアップロード');
         generateBtn.title = reasons.length > 0 ? `必要: ${reasons.join('、')}` : '';
@@ -9366,18 +9455,28 @@ async function startIntermediateImageGeneration(options = {}) {
         const usesCharacterImage = !!preset.requiresCharacterImage;
         let effectiveRefImage = null;
         if (usesCharacterImage) {
-            if (state.characterImage?.filename) {
-                effectiveRefImage = state.characterImage.filename;
-            } else if (state.uploadedImage?.filename) {
-                effectiveRefImage = state.uploadedImage.filename;
-                console.log('[SimpleVideo] キャラ合成画像未生成のためキー画像を参照に使用');
-            } else {
+            const resolved = resolveSceneReferenceImageForRun(state, { preferCharacter: true });
+            effectiveRefImage = resolved.filename;
+            if (!effectiveRefImage) {
+                throw new Error('参照画像がありません（キー画像またはキャラ合成画像が必要です）');
+            }
+            if (resolved.source === 'keyImage') {
+                console.log('[SimpleVideo] 内部参照画像がないためキー画像を参照に使用');
+            } else if (resolved.source === 'ref1') {
+                console.log('[SimpleVideo] 内部参照画像がないためref1を参照に使用');
+            }
+
+            if (isLikelyCharacterSheetFilename(effectiveRefImage)) {
                 const ds = Array.isArray(state.dropSlots) ? state.dropSlots : [];
-                if (ds[0]?.filename) {
-                    effectiveRefImage = ds[0].filename;
-                    console.log('[SimpleVideo] キャラ合成画像未生成のためdropSlots[0]を参照に使用');
-                } else {
-                    throw new Error('参照画像がありません（キー画像またはキャラ合成画像が必要です）');
+                const altCandidates = [
+                    state.characterImage?.filename,
+                    state.uploadedImage?.filename,
+                    ...ds.map((slot) => slot?.filename),
+                ].map((v) => String(v || '').trim()).filter(Boolean);
+                const nonSheet = altCandidates.find((fn) => !isLikelyCharacterSheetFilename(fn));
+                if (nonSheet) {
+                    console.log(`[SimpleVideo] Primary reference switched from sheet-like image to non-sheet image: ${effectiveRefImage} -> ${nonSheet}`);
+                    effectiveRefImage = nonSheet;
                 }
             }
         }
@@ -9417,6 +9516,9 @@ async function startIntermediateImageGeneration(options = {}) {
                 dropSlots: state.dropSlots,
             });
 
+            const hasSheetLikeCharacterRef = characterImages.some((img) => isLikelyCharacterSheetFilename(img?.filename));
+            const hasSheetLikeDropRef = (state.dropSlots || []).some((slot) => isLikelyCharacterSheetFilename(slot?.filename));
+
             const params = {};
             if (width && height) {
                 params.width = width;
@@ -9432,6 +9534,14 @@ async function startIntermediateImageGeneration(options = {}) {
                     finalExpandedPrompt = hint + '\n' + finalExpandedPrompt;
                     console.log(`[SimpleVideo] ref3 mode=${ref3Mode}: injected hint`);
                 }
+            }
+            if (hasSheetLikeCharacterRef || hasSheetLikeDropRef || isLikelyCharacterSheetFilename(effectiveRefImage)) {
+                finalExpandedPrompt = [
+                    'Reference constraint: If a character-sheet/contact-sheet/model-sheet is provided, use it as identity/style hint only.',
+                    'Do NOT render any split panels, multi-pose lineup, turnaround sheet, contact sheet, or duplicated character instances.',
+                    'Output exactly one primary subject in one full-frame scene composition.',
+                    finalExpandedPrompt,
+                ].join('\n');
             }
             params.prompt = finalExpandedPrompt;
 
@@ -9450,16 +9560,21 @@ async function startIntermediateImageGeneration(options = {}) {
             // Set additional input images from character images and dropSlots
             if (characterImages.length > 0 || (state.dropSlots && state.dropSlots.some(s => s?.filename))) {
                 let imgIndex = 2; // Start from input_image_2
+                const usedRefs = new Set([String(params.input_image || '').trim()]);
                 // Add character images
                 for (const charImg of characterImages) {
-                    if (charImg?.filename && imgIndex <= 9) {
+                    const fn = String(charImg?.filename || '').trim();
+                    if (fn && imgIndex <= 9 && !usedRefs.has(fn)) {
+                        usedRefs.add(fn);
                         params[`input_image_${imgIndex}`] = charImg.filename;
                         imgIndex++;
                     }
                 }
                 // Add dropSlots
                 for (const slot of (state.dropSlots || [])) {
-                    if (slot?.filename && imgIndex <= 9) {
+                    const fn = String(slot?.filename || '').trim();
+                    if (fn && imgIndex <= 9 && !usedRefs.has(fn)) {
+                        usedRefs.add(fn);
                         params[`input_image_${imgIndex}`] = slot.filename;
                         imgIndex++;
                     }
@@ -11517,9 +11632,15 @@ async function startGeneration() {
         if (typeof showToast === 'function') showToast('画像（キー画像）をアップロードするか、初期フレームを生成してください', 'warning');
         return;
     }
+    const dropSlots = Array.isArray(state.dropSlots) ? state.dropSlots : [];
+    const hasRef1 = !!String(dropSlots[0]?.filename || '').trim();
     const hasCharacterContext = !!state.selectedCharacter || !!String(state.characterImage?.filename || '').trim();
-    if (preset.requiresCharacter && !hasCharacterContext) {
-        if (typeof showToast === 'function') showToast('キャラクタを選択するか、キャラ画像を生成してください', 'warning');
+    const hasCharacterFallbackContext = hasIntermediate
+        || !!String(state.uploadedImage?.filename || '').trim()
+        || !!preparedImageFilename
+        || hasRef1;
+    if (preset.requiresCharacter && !hasCharacterContext && !hasCharacterFallbackContext) {
+        if (typeof showToast === 'function') showToast('キャラクタを選択するか、キャラ画像/キー画像(ref1)を用意してください', 'warning');
         return;
     }
 
@@ -11895,10 +12016,13 @@ async function startGeneration() {
 
             // Scene-image generation fallback:
             // if character image is not registered, use key image (or ref1) as reference only for this run.
-            const ds = Array.isArray(state.dropSlots) ? state.dropSlots : [];
-            const fallbackRefImage = String(state.uploadedImage?.filename || '').trim() || String(ds[0]?.filename || '').trim();
+            const fallbackRef = resolveSceneReferenceImageForRun(state, { preferCharacter: false });
+            const fallbackRefImage = String(fallbackRef.filename || '').trim();
             if (missingCount > 0 && !state.characterImage?.filename && !fallbackRefImage) {
                 throw new Error('参照画像がありません（キャラ画像・キー画像・ref1 のいずれかを用意してください）');
+            }
+            if (missingCount > 0 && !state.characterImage?.filename && fallbackRef.source === 'keyImage') {
+                console.log('[SimpleVideo] char_edit_i2i_flf: 内部参照画像なしのためキー画像を参照に使用');
             }
 
             const imageJobsToRun = Math.max(0, missingCount);
@@ -12182,10 +12306,13 @@ async function startGeneration() {
                 .filter((v) => !v || !String(v.filename || '').trim()).length;
 
             // If I2I generation is needed, require at least one usable reference image.
-            const ds = Array.isArray(state.dropSlots) ? state.dropSlots : [];
-            const fallbackRefImage = String(state.uploadedImage?.filename || '').trim() || String(ds[0]?.filename || '').trim();
+            const fallbackRef = resolveSceneReferenceImageForRun(state, { preferCharacter: false });
+            const fallbackRefImage = String(fallbackRef.filename || '').trim();
             if (missingCount > 0 && !state.characterImage?.filename && !fallbackRefImage) {
                 throw new Error('参照画像がありません（キャラ画像・キー画像・ref1 のいずれかを用意してください）');
+            }
+            if (missingCount > 0 && !state.characterImage?.filename && fallbackRef.source === 'keyImage') {
+                console.log('[SimpleVideo] char_edit_i2v_scene_cut: 内部参照画像なしのためキー画像を参照に使用');
             }
 
             const imageJobsToRun = Math.max(0, missingCount);

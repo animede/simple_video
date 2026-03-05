@@ -7070,6 +7070,23 @@ body.simple-video-enabled #simpleVideoLeft {
     font-size: 12px;
 }
 
+.simple-video-current-ref-preview {
+    margin-top: 6px;
+    width: 64px;
+    height: 64px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+}
+
+.simple-video-current-ref-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 /* Key image (single) */
 .simple-video-keyimage {
     width: 100%;
