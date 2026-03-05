@@ -2,7 +2,9 @@
 
 Version: V0.9-Preview
 
-Language: [日本語](README.md) | English
+License: [MIT](./LICENSE)
+
+Language: [日本語](./README.md) | English
 
 `simple_video_app` is a standalone version of **Simple Video** that uses ComfyUI as the backend.
 

@@ -2,7 +2,9 @@
 
 Version: V0.9-Preview
 
-Language: 日本語 | [English](README_EN.md)
+License: [MIT](./LICENSE)
+
+Language: 日本語 | [English](./README_EN.md)
 
 `simple_video_app` は、ComfyUI をバックエンドとして使う `かんたん動画` の standalone アプリです。
 
