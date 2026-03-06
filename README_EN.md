@@ -432,6 +432,18 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 - Targeted scene regeneration requires the `Scene Prompts` field to be non-empty
 - Re-run `🤖 Generate Prompts` to restore scene prompts, then run targeted regeneration again
 
+## Examples
+
+### MV (Music Video)
+
+https://github.com/user-attachments/assets/da13a98c-410a-49ce-b2f2-17f86d4b7e6a
+
+### Long-form Video
+
+https://github.com/user-attachments/assets/d4401f2f-84b9-4070-ad89-2ab68f13cf70
+
+https://github.com/user-attachments/assets/1e19aebe-271f-4c9f-bbb4-b75bb237d319
+
 ## Note for Public Repository
 
 - This README is intentionally limited to practical usage information for public users.

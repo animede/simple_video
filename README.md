@@ -539,6 +539,18 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 - `シーンごとのプロンプト` 欄を空にすると、指定シーン再生成は実行できません
 - `🤖 プロンプト生成` を再実行してプロンプトを復元してから、指定シーン再生成を実行してください
 
+## 生成サンプル
+
+### MV（音楽付き動画）
+
+https://github.com/user-attachments/assets/da13a98c-410a-49ce-b2f2-17f86d4b7e6a
+
+### 長尺動画
+
+https://github.com/user-attachments/assets/d4401f2f-84b9-4070-ad89-2ab68f13cf70
+
+https://github.com/user-attachments/assets/1e19aebe-271f-4c9f-bbb4-b75bb237d319
+
 ## 公開に関する注意
 
 - 本 README は公開リポジトリ向けの利用情報に限定しています。
