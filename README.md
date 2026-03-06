@@ -541,11 +541,11 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 
 ## 生成サンプル
 
-### MV（音楽付き動画）
+### 長尺動画
 
 https://github.com/user-attachments/assets/da13a98c-410a-49ce-b2f2-17f86d4b7e6a
 
-### 長尺動画
+### MV（音楽付き動画）
 
 https://github.com/user-attachments/assets/d4401f2f-84b9-4070-ad89-2ab68f13cf70
 

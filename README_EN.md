@@ -434,11 +434,11 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 
 ## Examples
 
-### MV (Music Video)
+### Long-form Video
 
 https://github.com/user-attachments/assets/da13a98c-410a-49ce-b2f2-17f86d4b7e6a
 
-### Long-form Video
+### MV (Music Video)
 
 https://github.com/user-attachments/assets/d4401f2f-84b9-4070-ad89-2ab68f13cf70
 
