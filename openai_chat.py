@@ -4,6 +4,12 @@ from   openai import OpenAI
 from   openai import AsyncOpenAI
 import asyncio
 
+# ローカル LLM モジュール（--local-llm 時のみ利用）
+try:
+    import local_llm as _local_llm_mod
+except ImportError:
+    _local_llm_mod = None  # type: ignore[assignment]
+
 # OpenAI APIから応答を取得する関数 ログなし（非同期版）
 async def chat_req(
     client,
@@ -14,6 +20,20 @@ async def chat_req(
     temperature: float | None = None,
     repeat_penalty: float | None = None,
 ):
+    # ローカル LLM がロード済みなら直接呼び出す（client は使わない）
+    if _local_llm_mod is not None and _local_llm_mod.is_loaded():
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: _local_llm_mod.chat_completion(
+                user_msg=user_msg,
+                role=role,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                repeat_penalty=repeat_penalty,
+            ),
+        )
+
     messages = [
         {"role": "system", "content": role},
         {"role": "user", "content": user_msg}

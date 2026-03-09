@@ -53,6 +53,8 @@ if /i "%~1"=="--comfyui-output" ( set "COMFYUI_OUTPUT_DIR=%~2" & shift & shift &
 if /i "%~1"=="--openai-base-url" ( set "OPENAI_BASE_URL=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--openai-api-key" ( set "OPENAI_API_KEY=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--vlm-base-url"   ( set "VLM_BASE_URL=%~2" & shift & shift & goto parse_args )
+if /i "%~1"=="--local-llm"      ( set "SIMPLE_VIDEO_LOCAL_LLM=1" & shift & goto parse_args )
+if /i "%~1"=="--local-llm-model" ( set "SIMPLE_VIDEO_LOCAL_LLM=1" & set "SIMPLE_VIDEO_LOCAL_LLM_MODEL=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--image-model"    ( set "SIMPLE_VIDEO_IMAGE_MODEL=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--env-file" (
     if exist "%~2" (
@@ -88,6 +90,8 @@ if defined COMFYUI_OUTPUT_DIR echo [simple_video_app] COMFYUI_OUTPUT_DIR=%COMFYU
 if defined OPENAI_BASE_URL echo [simple_video_app] OPENAI_BASE_URL=%OPENAI_BASE_URL%
 if defined VLM_BASE_URL echo [simple_video_app] VLM_BASE_URL=%VLM_BASE_URL%
 if defined SIMPLE_VIDEO_IMAGE_MODEL echo [simple_video_app] IMAGE_MODEL=%SIMPLE_VIDEO_IMAGE_MODEL%
+if defined SIMPLE_VIDEO_LOCAL_LLM echo [simple_video_app] LOCAL_LLM=enabled
+if defined SIMPLE_VIDEO_LOCAL_LLM_MODEL echo [simple_video_app] LOCAL_LLM_MODEL=%SIMPLE_VIDEO_LOCAL_LLM_MODEL%
 
 if defined RELOAD_FLAG (
     uvicorn app:app --host %HOST% --port %PORT% %RELOAD_FLAG%
@@ -109,6 +113,8 @@ echo       --comfyui-output PATH        ComfyUI output dir override (sets COMFYU
 echo       --openai-base-url URL        OpenAI-compatible endpoint (sets OPENAI_BASE_URL)
 echo       --openai-api-key KEY         OpenAI API key (sets OPENAI_API_KEY)
 echo       --vlm-base-url URL           VLM endpoint (sets VLM_BASE_URL)
+echo       --local-llm                  Use built-in local LLM (gemma-3-4b-it, CPU)
+echo       --local-llm-model URL^|PATH  Custom GGUF model (URL or local path)
 echo       --image-model 2512^|2511     Image model variant (default: 2512)
 echo       --env-file PATH              Additional env file to load
 echo       --reload                     Enable uvicorn reload (default)

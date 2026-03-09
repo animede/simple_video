@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v91.0
+Version: v92.0
 
 License: [MIT](./LICENSE)
 
@@ -10,7 +10,7 @@ Language: [日本語](./README.md) | English
 
 This document is focused on practical information for public repository users: setup, run, usage, and limits.
 
-## Why v91.0
+## Why v92.0
 
 - **All-in-one flow**: image (T2I/I2I) -> video (T2V/I2V/FLF) -> music (T2A) -> merge (M2V/V2M)
 - **Faster prompt workflow**: 2-step flow (`🧠 Build Scenario` -> `🤖 Generate Prompts`)
@@ -372,12 +372,21 @@ Startup options:
 ./start.sh --comfyui-server 127.0.0.1:8188 --env-file ../.env --no-reload
 ./start.sh --openai-api-key sk-xxxx
 ./start.sh --image-model 2511
+./start.sh --local-llm
+./start.sh --local-llm-model https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
+./start.sh --local-llm-model /path/to/my-model.gguf
 ```
 
 Notes:
 
 - `start.sh` auto-activates `.venv` (`./.venv` or `../.venv`) if found
 - Use `--image-model 2511` for lighter image model operation
+- `--local-llm` enables built-in LLM for scenario creation, prompt generation, translation, etc. without an external LLM API
+  - On first launch, the model (gemma-3-4b-it-Q4_K_M.gguf, ~2.49 GB) is downloaded automatically
+  - `--local-llm-model` allows specifying a custom GGUF model (URL or local path)
+  - Can also be set via `SIMPLE_VIDEO_LOCAL_LLM_MODEL` environment variable
+  - Runs on CPU only (no GPU required)
+  - VLM (image analysis) still requires an external API
 
 Environment variable examples:
 
@@ -385,6 +394,43 @@ Environment variable examples:
 SIMPLE_VIDEO_HOST=0.0.0.0 SIMPLE_VIDEO_PORT=18090 ./start.sh
 OPENAI_BASE_URL=http://127.0.0.1:11434/v1 OPENAI_API_KEY=dummy ./start.sh
 ```
+
+## Local LLM (`--local-llm`)
+
+Run scenario creation, prompt generation, translation, lyrics writing, etc. without an external LLM API (Ollama, etc.).
+Uses llama-cpp-python and runs on CPU only.
+
+### Basic Usage
+
+```bash
+# Start with default model (gemma-3-4b-it-Q4_K_M, 2.49 GB)
+./start.sh --local-llm
+```
+
+On first launch, the model is automatically downloaded and saved to `llm/models/`. Subsequent launches skip the download.
+
+### Custom Model
+
+Use `--local-llm-model` or the `SIMPLE_VIDEO_LOCAL_LLM_MODEL` environment variable to specify any GGUF model.
+
+```bash
+# Specify a HuggingFace URL (auto-download on first launch)
+./start.sh --local-llm-model https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
+
+# Specify a local file directly
+./start.sh --local-llm-model /path/to/my-model.gguf
+
+# Specify via environment variable
+SIMPLE_VIDEO_LOCAL_LLM_MODEL=https://huggingface.co/.../model.gguf ./start.sh --local-llm
+```
+
+> **Note**: `--local-llm-model` automatically enables `--local-llm`.
+
+### Limitations
+
+- **VLM (image analysis) is not supported**. An external API is still required for image analysis features.
+- CPU inference is slower than external APIs.
+- If model loading fails, the system automatically falls back to the external LLM API.
 
 ## Quick Check
 

@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v91.0
+Version: v92.0
 
 License: [MIT](./LICENSE)
 
@@ -10,7 +10,7 @@ Language: 日本語 | [English](./README_EN.md)
 
 公開リポジトリ向けに、利用者が必要な情報（導入・実行・操作・制約）に限定して記載しています。
 
-## v91.0 の価値
+## v92.0 の価値
 
 - **1つのUIで完結**: 画像（T2I/I2I）→ 動画（T2V/I2V/FLF）→ 音楽（T2A）→ 合成（M2V/V2M）
 - **プロンプト作業を短縮**: `🧠 シナリオ作成` → `🤖 プロンプト生成` の2ステップ
@@ -480,12 +480,21 @@ python3 -m pip install -r requirements.txt
 ./start.sh --comfyui-server 127.0.0.1:8188 --env-file ../.env --no-reload
 ./start.sh --openai-api-key sk-xxxx
 ./start.sh --image-model 2511
+./start.sh --local-llm
+./start.sh --local-llm-model https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
+./start.sh --local-llm-model /path/to/my-model.gguf
 ```
 
 補足:
 
 - `start.sh` は `.venv`（`./.venv` または `../.venv`）を自動検出して有効化します
 - 画像モデルを軽量側で運用する場合は `--image-model 2511` を使用してください
+- `--local-llm` を指定すると、外部 LLM API 不要でシナリオ作成・プロンプト生成・翻訳等が動作します
+  - 初回起動時にモデル（gemma-3-4b-it-Q4_K_M.gguf, 約 2.49 GB）を自動ダウンロードします
+  - `--local-llm-model` で任意の GGUF モデルを指定可能（URL またはローカルパス）
+  - 環境変数 `SIMPLE_VIDEO_LOCAL_LLM_MODEL` でも指定できます
+  - CPU のみで動作します（GPU 不要）
+  - VLM（画像解析）は引き続き外部 API が必要です
 
 環境変数例:
 
@@ -493,6 +502,43 @@ python3 -m pip install -r requirements.txt
 SIMPLE_VIDEO_HOST=0.0.0.0 SIMPLE_VIDEO_PORT=18090 ./start.sh
 OPENAI_BASE_URL=http://127.0.0.1:11434/v1 OPENAI_API_KEY=dummy ./start.sh
 ```
+
+## ローカル LLM（`--local-llm`）
+
+外部 LLM API（Ollama 等）なしでシナリオ作成・プロンプト生成・翻訳・作詞等を動かす機能です。
+llama-cpp-python を使用し、CPU のみで動作します。
+
+### 基本的な使い方
+
+```bash
+# デフォルトモデル (gemma-3-4b-it-Q4_K_M, 2.49 GB) で起動
+./start.sh --local-llm
+```
+
+初回起動時にモデルを自動ダウンロードし、`llm/models/` に保存します。2回目以降はダウンロード不要です。
+
+### カスタムモデルの指定
+
+`--local-llm-model` または環境変数 `SIMPLE_VIDEO_LOCAL_LLM_MODEL` で任意の GGUF モデルを指定できます。
+
+```bash
+# HuggingFace の URL を指定（初回自動ダウンロード）
+./start.sh --local-llm-model https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
+
+# ローカルファイルを直接指定
+./start.sh --local-llm-model /path/to/my-model.gguf
+
+# 環境変数で指定
+SIMPLE_VIDEO_LOCAL_LLM_MODEL=https://huggingface.co/.../model.gguf ./start.sh --local-llm
+```
+
+> **注意**: `--local-llm-model` を指定すると `--local-llm` も自動的に有効になります。
+
+### 制限事項
+
+- **VLM（画像解析）には対応していません**。画像解析機能を使う場合は引き続き外部 API が必要です。
+- CPU 推論のため、外部 API より応答速度は遅くなります。
+- モデルのロードに失敗した場合は外部 LLM API に自動フォールバックします。
 
 ## クイックチェック
 

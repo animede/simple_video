@@ -30,6 +30,8 @@ Options:
 			--openai-base-url URL			OpenAI-compatible endpoint (sets OPENAI_BASE_URL)
 			--openai-api-key KEY			OpenAI API key (sets OPENAI_API_KEY)
 			--vlm-base-url URL			VLM endpoint (sets VLM_BASE_URL)
+			--local-llm				Use built-in local LLM (gemma-3-4b-it, CPU)
+			--local-llm-model URL|PATH		Custom GGUF model (URL or local path)
 			--image-model 2512|2511			Image model variant (default: 2512)
 			--env-file PATH				Additional env file to load
 			--reload				Enable uvicorn reload (default)
@@ -96,6 +98,15 @@ while [ $# -gt 0 ]; do
 			;;
 		--vlm-base-url)
 			export VLM_BASE_URL="${2:-}"
+			shift 2
+			;;
+		--local-llm)
+			export SIMPLE_VIDEO_LOCAL_LLM="1"
+			shift
+			;;
+		--local-llm-model)
+			export SIMPLE_VIDEO_LOCAL_LLM="1"
+			export SIMPLE_VIDEO_LOCAL_LLM_MODEL="${2:-}"
 			shift 2
 			;;
 		--image-model)
@@ -165,6 +176,12 @@ if [ -n "${VLM_BASE_URL:-}" ]; then
 fi
 if [ -n "${SIMPLE_VIDEO_IMAGE_MODEL:-}" ]; then
 	echo "[simple_video_app] IMAGE_MODEL=$SIMPLE_VIDEO_IMAGE_MODEL"
+fi
+if [ -n "${SIMPLE_VIDEO_LOCAL_LLM:-}" ]; then
+	echo "[simple_video_app] LOCAL_LLM=enabled"
+	if [ -n "${SIMPLE_VIDEO_LOCAL_LLM_MODEL:-}" ]; then
+		echo "[simple_video_app] LOCAL_LLM_MODEL=$SIMPLE_VIDEO_LOCAL_LLM_MODEL"
+	fi
 fi
 
 exec "${CMD[@]}"

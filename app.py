@@ -175,6 +175,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "dummy")
 VLM_BASE_URL = os.environ.get("VLM_BASE_URL", OPENAI_BASE_URL)
 VLM_API_KEY = os.environ.get("VLM_API_KEY", OPENAI_API_KEY)
 VLM_MODEL = os.environ.get("VLM_MODEL", "gemma-3-27b-it")
+LOCAL_LLM_ENABLED = os.environ.get("SIMPLE_VIDEO_LOCAL_LLM", "").strip().lower() in ("1", "true", "yes", "on")
 
 WORKFLOW_NAMES: Dict[str, str] = {
     "qwen_t2i_2512_lightning4": "t2i_qwen_image_2512_lightning_api.json",
@@ -2304,6 +2305,18 @@ async def on_startup() -> None:
     REF_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
     await job_manager.start()
 
+    # --- ローカル LLM の初期化 ---
+    if LOCAL_LLM_ENABLED:
+        try:
+            import local_llm
+            _llm_model_spec = os.environ.get("SIMPLE_VIDEO_LOCAL_LLM_MODEL", "").strip()
+            if _llm_model_spec:
+                local_llm.configure(_llm_model_spec)
+            local_llm.load_model()
+        except Exception as e:
+            print(f"[local-llm] ❌ ローカル LLM の初期化に失敗しました: {e}", file=sys.stderr)
+            print("[local-llm]    外部 LLM API にフォールバックします", file=sys.stderr)
+
     _sep = "─" * 56
     print(f"\n{_sep}")
     print("  simple_video_app  起動設定")
@@ -2313,7 +2326,13 @@ async def on_startup() -> None:
     print(f"  ComfyUI input/   : {COMFY_INPUT_DIR}")
     print(f"  ComfyUI output/  : {COMFY_OUTPUT_DIR}")
     print(_sep)
-    print(f"  LLM  (テキスト)  : {OPENAI_BASE_URL}")
+    if LOCAL_LLM_ENABLED:
+        import local_llm as _llm_status
+        _llm_model_name = _llm_status.MODEL_FILENAME
+        _llm_label = f"✅ ローカル ({_llm_model_name})" if _llm_status.is_loaded() else "❌ ローカル (ロード失敗 → 外部 API フォールバック)"
+        print(f"  LLM  (テキスト)  : {_llm_label}")
+    else:
+        print(f"  LLM  (テキスト)  : {OPENAI_BASE_URL}")
     print(f"  LLM  モデル       : {os.environ.get('OPENAI_CHAT_MODEL', '(env: OPENAI_CHAT_MODEL 未設定)')}")
     _vlm_url = VLM_BASE_URL if VLM_BASE_URL != OPENAI_BASE_URL else f"{VLM_BASE_URL}  (LLM と同一)"
     print(f"  VLM  (画像解析)  : {_vlm_url}")
