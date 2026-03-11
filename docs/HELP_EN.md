@@ -27,6 +27,8 @@ Notes:
 2. Use lyric/tag suggestion when needed
 3. Run music generation and check the output audio
 
+With `--ace-step-url`, you can use `🧠 Thinking` (high quality) and `✨ AI Tags` (tag enhancement).
+
 ## 4. M2V (Generate Video from Music)
 
 1. Select generated audio or uploaded audio
@@ -38,6 +40,11 @@ Notes:
 1. Select generated video or uploaded video
 2. Specify music style conditions if needed
 3. Run and check the resulting video with merged music
+
+## 5.5 🎵 Add Music to Video
+
+- A `🎵 Add Music` button appears on concatenated video output (when audio is available)
+- Click to merge audio track onto video and create a PV
 
 ## 6. When Something Goes Wrong
 

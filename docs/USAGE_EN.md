@@ -103,6 +103,14 @@ Recommended music scenario length:
 | 🎵 Generate Music | Generate audio using ACE-Step workflow |
 | 🎬 Music->Video (M2V) | Generate video aligned to music |
 
+When an ACE-Step API server is connected, additional controls appear:
+
+| Control | Description |
+|---|---|
+| 🧠 Thinking | ON for high-quality generation (steps=50, cfg=3.0), OFF for turbo mode (steps=8, cfg=1.0) |
+| ✨ AI Tags | Auto-enhance tags/caption using ACE-Step API's LM |
+| CFG | Guidance strength (auto-adjusted when Thinking is toggled) |
+
 ### 5.3 Audio Source for M2V
 
 - Switch source between “Generated Music” and “Uploaded Audio”
@@ -115,6 +123,19 @@ Recommended music scenario length:
   - `Input scenario`: return to scenario field for editing
 - When doing targeted scene regeneration after M2V, keep the `Scene Prompts` field populated (do not clear it)
 
+### 5.5 ACE-Step API Server Integration
+
+With `--ace-step-url`, you can connect an external ACE-Step API server for enhanced music generation:
+
+- **Thinking mode**: LM-enhanced high-quality music generation (default ON)
+- **AI Tag enhancement**: Auto-generate/enhance tags using ACE-Step API's LM
+- Without ACE-Step API, music is generated via ComfyUI workflow (turbo 8 steps)
+
+Startup example:
+```bash
+./start.sh --ace-step-url http://127.0.0.1:8001
+```
+
 ---
 
 ## 6. 🎬 Output
@@ -123,7 +144,16 @@ Recommended music scenario length:
 - Click to open full-screen modal playback
 - Download links
 
-### 6.1 V2M Input (Video -> Music)
+### 6.1 🎵 Add Music to Video
+
+A `🎵 Add Music` button appears on concatenated video output (only when audio is available):
+
+- Shown when music has been generated or an external audio file has been uploaded
+- Clicking it merges the audio track onto the video from the beginning using ffmpeg
+- If video is shorter, audio fades out; if audio is shorter, it is merged as-is
+- Useful for quickly creating a PV (video + music) without using M2V
+
+### 6.2 V2M Input (Video -> Music)
 
 - Upload video by drag & drop (for V2M input)
 - Video duration is auto-detected and shown

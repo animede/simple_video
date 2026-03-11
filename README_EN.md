@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v92.0
+Version: v94.0
 
 License: [MIT](./LICENSE)
 
@@ -10,11 +10,12 @@ Language: [日本語](./README.md) | English
 
 This document is focused on practical information for public repository users: setup, run, usage, and limits.
 
-## Why v92.0
+## Why v94.0
 
 - **All-in-one flow**: image (T2I/I2I) -> video (T2V/I2V/FLF) -> music (T2A) -> merge (M2V/V2M)
 - **Faster prompt workflow**: 2-step flow (`🧠 Build Scenario` -> `🤖 Generate Prompts`)
 - **More stable style continuity**: style presets + post-generation style-consistency guardrails
+- **ACE-Step API integration**: Thinking mode (high-quality generation) and AI Tag enhancement
 
 ## Quick Start (3 Steps)
 
@@ -51,6 +52,8 @@ The app works on Windows without any additional changes.
 - V2M (Video to Music)
 - MV generation (video with music)
 - PV generation (add music track to video)
+- Add music to concatenated video (`🎵 Add Music` button)
+- ACE-Step API integration (Thinking mode / AI Tag enhancement)
 - 2-step prompt workflow (`🧠 Build Scenario` → `🤖 Generate Prompts`)
 - One-click style presets (Realistic / Anime / Illustration / Cinematic / Line-art / Pixel-art) with post-generation style guardrails
 - In-app floating Help panel (Quick Help / User Guide / Technical Guide)
@@ -63,6 +66,7 @@ The app works on Windows without any additional changes.
 - Create music (T2A)
 - Create MV by adding video to music (M2V)
 - Create PV by adding music to video (V2M)
+- Add music to concatenated video with one click (`🎵 Add Music` button)
 - Build scene prompts with 2-step flow
 - Apply style presets and auto-correct style consistency after prompt generation
 
@@ -375,6 +379,7 @@ Startup options:
 ./start.sh --local-llm
 ./start.sh --local-llm-model https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
 ./start.sh --local-llm-model /path/to/my-model.gguf
+./start.sh --ace-step-url http://127.0.0.1:8001
 ```
 
 Notes:
@@ -387,6 +392,8 @@ Notes:
   - Can also be set via `SIMPLE_VIDEO_LOCAL_LLM_MODEL` environment variable
   - Runs on CPU only (no GPU required)
   - VLM (image analysis) still requires an external API
+- `--ace-step-url` enables high-quality music generation via ACE-Step API server (Thinking mode / AI Tag enhancement)
+  - When not set, T2A uses ComfyUI workflow (turbo 8 steps)
 
 Environment variable examples:
 
@@ -431,6 +438,43 @@ SIMPLE_VIDEO_LOCAL_LLM_MODEL=https://huggingface.co/.../model.gguf ./start.sh --
 - **VLM (image analysis) is not supported**. An external API is still required for image analysis features.
 - CPU inference is slower than external APIs.
 - If model loading fails, the system automatically falls back to the external LLM API.
+
+## ACE-Step API Integration (`--ace-step-url`)
+
+Use an external ACE-Step API server for high-quality music generation.
+In addition to ComfyUI workflow-based T2A (turbo 8 steps), this enables **Thinking mode** (LM-enhanced 50 steps)
+and **AI Tag enhancement** (`/format_input`).
+
+### Basic Usage
+
+```bash
+# Start with ACE-Step API server
+./start.sh --ace-step-url http://127.0.0.1:8001
+```
+
+- Without `--ace-step-url`, T2A runs via ComfyUI workflow as before
+- With it, `ace_step_1_5_t2a` workflow jobs are forwarded to the ACE-Step API server
+
+### UI Controls
+
+When ACE-Step API is connected, the music generation section shows:
+
+| Control | Description |
+|--|--|
+| **🧠 Thinking** | ON for LM-enhanced high-quality generation (steps=50, cfg=3.0). OFF for turbo mode (steps=8, cfg=1.0) |
+| **✨ AI Tags** | Enhance tags/caption using ACE-Step API server's LM |
+
+### Environment Variable
+
+```bash
+ACE_STEP_API_URL=http://127.0.0.1:8001 ./start.sh
+```
+
+### Limitations
+
+- ACE-Step API server must be running separately
+- Thinking mode may take several minutes per generation
+- AI Tag enhancement requires LM on the ACE-Step API server side
 
 ## Quick Check
 

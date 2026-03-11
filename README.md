@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v92.0
+Version: v94.0
 
 License: [MIT](./LICENSE)
 
@@ -10,11 +10,12 @@ Language: 日本語 | [English](./README_EN.md)
 
 公開リポジトリ向けに、利用者が必要な情報（導入・実行・操作・制約）に限定して記載しています。
 
-## v92.0 の価値
+## v94.0 の価値
 
 - **1つのUIで完結**: 画像（T2I/I2I）→ 動画（T2V/I2V/FLF）→ 音楽（T2A）→ 合成（M2V/V2M）
 - **プロンプト作業を短縮**: `🧠 シナリオ作成` → `🤖 プロンプト生成` の2ステップ
 - **画風の崩れを抑制**: 画風テンプレ + 画風一致ガードレールで連続生成の安定性を向上
+- **ACE-Step API 統合**: Thinking モード（高品質生成）と AI Tag 強化に対応
 
 ## 最短スタート（3ステップ）
 
@@ -51,6 +52,8 @@ Windows でもそのまま動作します。追加の変更は不要です。
 - V2M（動画から音楽生成）
 - MV（音楽付き動画生成: 音楽に動画を重ねる）
 - PV（動画+音楽合成: 動画に音楽を重ねる）
+- 結合動画への音楽追加（`🎵 音楽を追加` ボタン）
+- ACE-Step API 統合（Thinking モード / AI Tag 強化）
 - 2ステップのプロンプト作成（`🧠 シナリオ作成` → `🤖 プロンプト生成`）
 - 画風テンプレのワンクリック注入（リアル寄り/アニメ風/イラスト風/映画風/ラインアート風/ドット絵風）と、生成後の画風一致ガードレール
 - アプリ内フローティング Help（クイックヘルプ / ユーザーズガイド / テクニカルガイド）
@@ -63,6 +66,7 @@ Windows でもそのまま動作します。追加の変更は不要です。
 - 音楽を作る（T2A）
 - 音楽に動画を重ねて MV を作る（M2V）
 - 動画に音楽を重ねて PV を作る（V2M）
+- 結合動画に音楽を追加する（`🎵 音楽を追加` ボタン）
 - 2ステップでシーンプロンプトを作る（🧠 シナリオ作成 → 🤖 プロンプト生成）
 - 画風テンプレをワンクリック適用し、生成後に画風一致ガードレールで補正する
 
@@ -483,6 +487,7 @@ python3 -m pip install -r requirements.txt
 ./start.sh --local-llm
 ./start.sh --local-llm-model https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf
 ./start.sh --local-llm-model /path/to/my-model.gguf
+./start.sh --ace-step-url http://127.0.0.1:8001
 ```
 
 補足:
@@ -495,6 +500,8 @@ python3 -m pip install -r requirements.txt
   - 環境変数 `SIMPLE_VIDEO_LOCAL_LLM_MODEL` でも指定できます
   - CPU のみで動作します（GPU 不要）
   - VLM（画像解析）は引き続き外部 API が必要です
+- `--ace-step-url` を指定すると、ACE-Step API サーバー経由で高品質音楽生成（Thinking モード / AI Tag 強化）が利用できます
+  - 未指定時は ComfyUI ワークフロー（turbo 8 ステップ）で T2A を実行
 
 環境変数例:
 
@@ -539,6 +546,43 @@ SIMPLE_VIDEO_LOCAL_LLM_MODEL=https://huggingface.co/.../model.gguf ./start.sh --
 - **VLM（画像解析）には対応していません**。画像解析機能を使う場合は引き続き外部 API が必要です。
 - CPU 推論のため、外部 API より応答速度は遅くなります。
 - モデルのロードに失敗した場合は外部 LLM API に自動フォールバックします。
+
+## ACE-Step API 統合（`--ace-step-url`）
+
+外部の ACE-Step API サーバーを使って高品質な音楽生成を行う機能です。
+ComfyUI ワークフロー経由の T2A（turbo 8 ステップ）に加え、**Thinking モード**（LM 拡張 50 ステップ）
+と **AI Tag 強化**（`/format_input`）が利用可能になります。
+
+### 基本的な使い方
+
+```bash
+# ACE-Step API サーバーを指定して起動
+./start.sh --ace-step-url http://127.0.0.1:8001
+```
+
+- `--ace-step-url` 未指定時は従来どおり ComfyUI ワークフローで T2A を実行します
+- 指定時は `ace_step_1_5_t2a` ワークフローのジョブが ACE-Step API サーバーに転送されます
+
+### 画面上の操作
+
+ACE-Step API が接続されると、音楽生成セクションに以下のコントロールが表示されます:
+
+| コントロール | 説明 |
+|--|--|
+| **🧠 Thinking** | ON にすると LM 拡張の高品質生成（steps=50, cfg=3.0）。OFF は turbo モード（steps=8, cfg=1.0） |
+| **✨ AI Tags** | ACE-Step API の LM でタグ/キャプションを自動強化 |
+
+### 環境変数
+
+```bash
+ACE_STEP_API_URL=http://127.0.0.1:8001 ./start.sh
+```
+
+### 制限事項
+
+- ACE-Step API サーバーが別途起動・動作している必要があります
+- Thinking モードは生成に数分〜10分かかることがあります
+- AI Tag 強化は ACE-Step API サーバー側の LM が必要です
 
 ## クイックチェック
 

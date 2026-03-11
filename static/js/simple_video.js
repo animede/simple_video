@@ -601,9 +601,11 @@ const SimpleVideoUI = {
         t2aBpm: '120',
         t2aTimesignature: '4',
         t2aKeyscale: 'C major',
-        t2aSteps: '8',
-        t2aCfg: '1.0',
+        t2aSteps: '50',
+        t2aCfg: '3.0',
         t2aSeed: '',
+        t2aThinking: true,          // ACE-Step API thinking mode (LM-enhanced)
+        t2aAceStepApiAvailable: false, // detected at startup via /health
         // M2V/V2M source management
         t2aSourceMode: 'generated', // 'generated' | 'uploaded'
         t2aGeneratedAudio: null,    // { jobId, filename, previewUrl, durationSec }
@@ -750,6 +752,9 @@ function initSimpleVideoUI() {
     
     SimpleVideoUI.initialized = true;
     console.log('[SimpleVideo] UI initialized');
+
+    // Detect ACE-Step API availability (async, non-blocking)
+    detectAceStepApiAvailability().catch(e => console.warn('[SimpleVideo] ACE-Step API detection failed:', e));
 }
 
 /* ========================================
@@ -807,6 +812,7 @@ function loadSimpleVideoState() {
             SimpleVideoUI.state.t2aSteps = normalizeT2ANumber(parsed.t2aSteps, { fallback: 8, min: 1, max: 200, precision: 0 });
             SimpleVideoUI.state.t2aCfg = normalizeT2ANumber(parsed.t2aCfg, { fallback: 1.0, min: 0.1, max: 30, precision: 2 });
             SimpleVideoUI.state.t2aSeed = String(parsed.t2aSeed || '').replace(/\D/g, '');
+            SimpleVideoUI.state.t2aThinking = !!parsed.t2aThinking;
             SimpleVideoUI.state.t2aSourceMode = (String(parsed.t2aSourceMode || '') === 'uploaded') ? 'uploaded' : 'generated';
             SimpleVideoUI.state.t2aGeneratedAudio = parsed.t2aGeneratedAudio || null;
             SimpleVideoUI.state.t2aUploadedAudio = parsed.t2aUploadedAudio || null;
@@ -1713,6 +1719,18 @@ function renderSimpleVideoUI() {
                     <span>Steps</span>
                     <input class="simple-video-input" id="simpleVideoT2ASteps" inputmode="numeric" placeholder="8" />
                 </label>
+                <label class="simple-video-field simple-video-t2a-field-compact">
+                    <span>CFG</span>
+                    <input class="simple-video-input" id="simpleVideoT2ACfg" inputmode="decimal" placeholder="1.0" />
+                </label>
+            </div>
+            <div class="simple-video-form-row simple-video-t2a-param-row" id="simpleVideoT2AAceStepRow" style="display:none; margin-top:6px; align-items:center;">
+                <label class="simple-video-field" style="display:flex;align-items:center;gap:6px;min-width:auto;">
+                    <input type="checkbox" id="simpleVideoT2AThinkingCheck" />
+                    <span title="LM を使った高品質生成（生成時間が長くなります）">🧠 Thinking</span>
+                </label>
+                <button class="simple-video-settings-btn simple-video-inline-btn simple-video-t2a-mini-btn" id="simpleVideoT2AAITagsBtn" type="button" title="AI でタグ/キャプションを強化">✨ AI Tags</button>
+                <span class="simple-video-hint" style="margin-left:4px;font-size:0.78em;opacity:0.7;" id="simpleVideoT2AAceStepHint">ACE-Step API 接続中</span>
             </div>
             <div class="simple-video-generate-row simple-video-t2a-actions-row" style="margin-top:10px;">
                 <button class="simple-video-settings-btn simple-video-inline-btn simple-video-t2a-mini-btn" id="simpleVideoT2AAutoBtn" type="button">🚀 AUTO</button>
@@ -2514,6 +2532,47 @@ function attachSimpleVideoEventListeners() {
     t2aGenBtn?.addEventListener('click', async (e) => {
         e.preventDefault();
         await startSimpleVideoT2AGeneration();
+    });
+
+    // --- ACE-Step API: Thinking mode toggle ---
+    const t2aThinkingCheck = document.getElementById('simpleVideoT2AThinkingCheck');
+    t2aThinkingCheck?.addEventListener('change', (e) => {
+        SimpleVideoUI.state.t2aThinking = !!e.target.checked;
+        // Auto-adjust defaults when toggling thinking mode
+        if (SimpleVideoUI.state.t2aThinking) {
+            // Thinking mode: high quality defaults
+            const stepsInput = document.getElementById('simpleVideoT2ASteps');
+            const cfgInput = document.getElementById('simpleVideoT2ACfg');
+            if (stepsInput && (stepsInput.value === '8' || stepsInput.value === '')) {
+                stepsInput.value = '50';
+                SimpleVideoUI.state.t2aSteps = '50';
+            }
+            if (cfgInput && (cfgInput.value === '1.0' || cfgInput.value === '1' || cfgInput.value === '')) {
+                cfgInput.value = '3.0';
+                SimpleVideoUI.state.t2aCfg = '3.0';
+            }
+        } else {
+            // Turbo mode: fast defaults
+            const stepsInput = document.getElementById('simpleVideoT2ASteps');
+            const cfgInput = document.getElementById('simpleVideoT2ACfg');
+            if (stepsInput && (stepsInput.value === '50' || stepsInput.value === '')) {
+                stepsInput.value = '8';
+                SimpleVideoUI.state.t2aSteps = '8';
+            }
+            if (cfgInput && (cfgInput.value === '3.0' || cfgInput.value === '3' || cfgInput.value === '')) {
+                cfgInput.value = '1.0';
+                SimpleVideoUI.state.t2aCfg = '1.0';
+            }
+        }
+        saveSimpleVideoState();
+    });
+
+    // --- ACE-Step API: AI Tags enhancement button ---
+    const t2aAITagsBtn = document.getElementById('simpleVideoT2AAITagsBtn');
+    t2aAITagsBtn?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!e.isTrusted) return;
+        await enhanceAceStepTags();
     });
 
     const m2vBtn = document.getElementById('simpleVideoM2VBtn');
@@ -4461,8 +4520,14 @@ async function startSimpleVideoT2AGeneration(options = {}) {
         timesignature: normalizeT2ATimeSignature(state.t2aTimesignature),
         keyscale: aligned.keyscale,
         steps: Number(normalizeT2ANumber(state.t2aSteps, { fallback: 8, min: 1, max: 200, precision: 0 })),
+        cfg: Number(normalizeT2ANumber(state.t2aCfg, { fallback: 1.0, min: 0.1, max: 30, precision: 2 })),
         seed: Number(effectiveSeed),
     };
+
+    // ACE-Step API: pass thinking flag when API is available
+    if (state.t2aAceStepApiAvailable && state.t2aThinking) {
+        params.thinking = true;
+    }
 
     if (aligned.preferMajor) {
         console.log(`[SimpleVideo] T2A mood alignment: positive scenario detected (score=${aligned.polarityScore}), keyscale=${aligned.keyscale}, tags=${aligned.tags}`);
@@ -4819,6 +4884,110 @@ async function composeSimpleVideoT2ALyrics(options = {}) {
         updateGenerateButtonState();
     }
     return success;
+}
+
+/**
+ * Call ACE-Step API /format_input to enhance tags/caption using the server's LM.
+ */
+async function enhanceAceStepTags() {
+    if (!SimpleVideoUI.initialized) return;
+    const { state } = SimpleVideoUI;
+
+    if (!state.t2aAceStepApiAvailable) {
+        if (typeof showToast === 'function') showToast('ACE-Step API が利用できません', 'warning');
+        return;
+    }
+
+    const tags = String(state.t2aTags || '').trim();
+    const lyrics = String(state.t2aLyrics || '').trim();
+    if (!tags && !lyrics) {
+        if (typeof showToast === 'function') showToast('Tags または Lyrics を先に入力してください', 'warning');
+        return;
+    }
+
+    const btn = document.getElementById('simpleVideoT2AAITagsBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+        btn.textContent = '⏳ 強化中…';
+    }
+
+    try {
+        if (typeof showToast === 'function') showToast('✨ AI Tags 強化中...', 'info');
+        const baseURL = window.app?.api?.baseURL || '';
+        const resp = await fetch(`${baseURL}/api/v1/ace_step/format_input`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: tags, lyrics: lyrics, temperature: 0.85 }),
+        });
+        if (!resp.ok) {
+            const errText = await resp.text().catch(() => '');
+            throw new Error(`HTTP ${resp.status}: ${errText.slice(0, 200)}`);
+        }
+        const result = await resp.json();
+        // ACE-Step format_input returns { data: { caption: "...", lyrics: "..." } } or similar
+        const data = result.data || result;
+        const enhancedCaption = data.caption || data.prompt || data.tags || '';
+        const enhancedLyrics = data.lyrics || '';
+
+        if (enhancedCaption) {
+            state.t2aTags = enhancedCaption;
+            const tagsInput = document.getElementById('simpleVideoT2ATags');
+            if (tagsInput) tagsInput.value = enhancedCaption;
+        }
+        if (enhancedLyrics && !lyrics) {
+            // Only overwrite lyrics if user had none
+            state.t2aLyrics = enhancedLyrics;
+            const lyricsInput = document.getElementById('simpleVideoT2ALyrics');
+            if (lyricsInput) lyricsInput.value = enhancedLyrics;
+        }
+        saveSimpleVideoState();
+        if (typeof showToast === 'function') showToast('✅ AI Tags 強化完了', 'success');
+    } catch (error) {
+        console.error('[SimpleVideo] AI Tags enhancement error:', error);
+        if (typeof showToast === 'function') showToast(`AI Tags エラー: ${error.message}`, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '';
+            btn.textContent = '✨ AI Tags';
+        }
+    }
+}
+
+/**
+ * Detect ACE-Step API availability and update UI accordingly.
+ */
+async function detectAceStepApiAvailability() {
+    const { state } = SimpleVideoUI;
+    const baseURL = window.app?.api?.baseURL || '';
+    try {
+        const resp = await fetch(`${baseURL}/api/v1/ace_step/health`, { method: 'GET' });
+        if (resp.ok) {
+            const data = await resp.json();
+            state.t2aAceStepApiAvailable = !!data.available;
+        } else {
+            state.t2aAceStepApiAvailable = false;
+        }
+    } catch (_e) {
+        state.t2aAceStepApiAvailable = false;
+    }
+
+    // Show/hide ACE-Step API row
+    const aceRow = document.getElementById('simpleVideoT2AAceStepRow');
+    const aceHint = document.getElementById('simpleVideoT2AAceStepHint');
+    if (aceRow) {
+        aceRow.style.display = state.t2aAceStepApiAvailable ? 'flex' : 'none';
+    }
+    if (aceHint) {
+        aceHint.textContent = state.t2aAceStepApiAvailable ? '✅ ACE-Step API 接続済み' : '';
+    }
+
+    // Restore thinking checkbox state
+    const thinkingCheck = document.getElementById('simpleVideoT2AThinkingCheck');
+    if (thinkingCheck) {
+        thinkingCheck.checked = !!state.t2aThinking;
+    }
 }
 
 async function suggestSimpleVideoT2ATags(options = {}) {
@@ -6624,6 +6793,13 @@ function updateSimpleVideoUI() {
     if (t2aSeedInput) {
         t2aSeedInput.value = String(state.t2aSeed || '');
     }
+
+    // Restore ACE-Step API thinking checkbox
+    const t2aThinkingCheck = document.getElementById('simpleVideoT2AThinkingCheck');
+    if (t2aThinkingCheck) {
+        t2aThinkingCheck.checked = !!state.t2aThinking;
+    }
+    // ACE-Step API row visibility is managed by detectAceStepApiAvailability()
 
     // Restore selected character highlight
     const row = document.getElementById('simpleVideoCharactersRow');
@@ -11561,8 +11737,8 @@ function renderSimpleVideoOutputMedia({ jobId, outputs, title, preferMedia = 'vi
         out.innerHTML = `
             <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;padding:12px;gap:10px;">
                 ${heading}
-                <video controls playsinline src="${videoUrl}" style="max-width:100%;max-height:100%;object-fit:contain;"></video>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+                <video controls playsinline src="${videoUrl}" style="max-width:100%;max-height:320px;object-fit:contain;flex-shrink:1;min-height:0;"></video>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;flex-shrink:0;">
                     <a class="simple-video-btn" href="${videoUrl}" download target="_blank" rel="noopener">動画をダウンロード</a>
                     ${musicBtnHtml}
                 </div>

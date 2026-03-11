@@ -8298,10 +8298,12 @@ body.simple-video-enabled #simpleVideoLeft {
 
 .simple-video-output video {
     max-width: 100%;
-    max-height: 400px;
+    max-height: 320px;
     width: auto;
     height: auto;
     object-fit: contain;
+    flex-shrink: 1;
+    min-height: 0;
 }
 
 /* Initial image / refine preview overlay (temporary) */

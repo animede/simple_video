@@ -55,6 +55,7 @@ if /i "%~1"=="--openai-api-key" ( set "OPENAI_API_KEY=%~2" & shift & shift & got
 if /i "%~1"=="--vlm-base-url"   ( set "VLM_BASE_URL=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--local-llm"      ( set "SIMPLE_VIDEO_LOCAL_LLM=1" & shift & goto parse_args )
 if /i "%~1"=="--local-llm-model" ( set "SIMPLE_VIDEO_LOCAL_LLM=1" & set "SIMPLE_VIDEO_LOCAL_LLM_MODEL=%~2" & shift & shift & goto parse_args )
+if /i "%~1"=="--ace-step-url"   ( set "ACE_STEP_API_URL=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--image-model"    ( set "SIMPLE_VIDEO_IMAGE_MODEL=%~2" & shift & shift & goto parse_args )
 if /i "%~1"=="--env-file" (
     if exist "%~2" (
@@ -92,6 +93,7 @@ if defined VLM_BASE_URL echo [simple_video_app] VLM_BASE_URL=%VLM_BASE_URL%
 if defined SIMPLE_VIDEO_IMAGE_MODEL echo [simple_video_app] IMAGE_MODEL=%SIMPLE_VIDEO_IMAGE_MODEL%
 if defined SIMPLE_VIDEO_LOCAL_LLM echo [simple_video_app] LOCAL_LLM=enabled
 if defined SIMPLE_VIDEO_LOCAL_LLM_MODEL echo [simple_video_app] LOCAL_LLM_MODEL=%SIMPLE_VIDEO_LOCAL_LLM_MODEL%
+if defined ACE_STEP_API_URL echo [simple_video_app] ACE_STEP_API_URL=%ACE_STEP_API_URL%
 
 if defined RELOAD_FLAG (
     uvicorn app:app --host %HOST% --port %PORT% %RELOAD_FLAG%
@@ -115,6 +117,7 @@ echo       --openai-api-key KEY         OpenAI API key (sets OPENAI_API_KEY)
 echo       --vlm-base-url URL           VLM endpoint (sets VLM_BASE_URL)
 echo       --local-llm                  Use built-in local LLM (gemma-3-4b-it, CPU)
 echo       --local-llm-model URL^|PATH  Custom GGUF model (URL or local path)
+echo       --ace-step-url URL           ACE-Step API server URL (e.g. http://127.0.0.1:8001)
 echo       --image-model 2512^|2511     Image model variant (default: 2512)
 echo       --env-file PATH              Additional env file to load
 echo       --reload                     Enable uvicorn reload (default)

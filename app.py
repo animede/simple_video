@@ -176,6 +176,7 @@ VLM_BASE_URL = os.environ.get("VLM_BASE_URL", OPENAI_BASE_URL)
 VLM_API_KEY = os.environ.get("VLM_API_KEY", OPENAI_API_KEY)
 VLM_MODEL = os.environ.get("VLM_MODEL", "gemma-3-27b-it")
 LOCAL_LLM_ENABLED = os.environ.get("SIMPLE_VIDEO_LOCAL_LLM", "").strip().lower() in ("1", "true", "yes", "on")
+ACE_STEP_URL = os.environ.get("ACE_STEP_API_URL", "").strip().rstrip("/") or None
 
 WORKFLOW_NAMES: Dict[str, str] = {
     "qwen_t2i_2512_lightning4": "t2i_qwen_image_2512_lightning_api.json",
@@ -237,6 +238,7 @@ class WorkflowRequest(BaseModel):
     guidance_lyric: Optional[float] = None
     lyrics_strength: Optional[float] = None
     strip_audio: Optional[bool] = None
+    thinking: Optional[bool] = None
     response_type: str = "url"
     client_session_id: Optional[str] = None
     session_mode: Optional[str] = None
@@ -412,6 +414,9 @@ class JobManager:
                 await self.update(job, status="processing", progress=0.05, message="Submitting to ComfyUI")
                 if str(job.workflow).startswith("utility:"):
                     result = await execute_utility_job(job)
+                elif ACE_STEP_URL and str(job.workflow) == "ace_step_1_5_t2a":
+                    await self.update(job, status="processing", progress=0.05, message="ACE-Step API: 準備中")
+                    result = await execute_ace_step_api_job(job)
                 else:
                     result = await execute_generate_job(job)
                 await self.update(
@@ -916,6 +921,148 @@ async def execute_generate_job(job: Job) -> Dict[str, Any]:
         await asyncio.sleep(0.8)
 
     raise RuntimeError("Timed out waiting for ComfyUI job completion")
+
+
+async def execute_ace_step_api_job(job: Job) -> Dict[str, Any]:
+    """Execute T2A generation via ACE-Step API server instead of ComfyUI.
+
+    When ``ACE_STEP_URL`` is set and the requested workflow is
+    ``ace_step_1_5_t2a``, the job manager routes here instead of
+    ``execute_generate_job``.  This function:
+      1. POST /release_task  – create task
+      2. POST /query_result  – poll until done
+      3. Download audio to output/audio/
+    Returns the same output format as ``execute_generate_job``.
+    """
+    payload = WorkflowRequest(**job.request_payload)
+    params = dict(payload.parameters or {})
+
+    tags = payload.tags or params.get("tags", "")
+    lyrics = payload.lyrics or params.get("lyrics", "")
+    language = payload.language or params.get("language", "en")
+    duration_val = payload.duration or params.get("duration") or params.get("audio_duration") or 30
+    bpm_val = payload.bpm or params.get("bpm")
+    keyscale_val = payload.keyscale or params.get("keyscale")
+    timesig_val = payload.timesignature or params.get("timesignature", "4")
+    steps_val = payload.steps or params.get("steps") or 150
+    cfg_val = payload.cfg or params.get("cfg") or 3.0
+    seed_val = payload.seed or params.get("seed")
+    thinking = payload.thinking if payload.thinking is not None else params.get("thinking", True)
+
+    ace_payload: Dict[str, Any] = {
+        "prompt": str(tags),
+        "lyrics": str(lyrics),
+        "thinking": bool(thinking),
+        "vocal_language": str(language),
+        "audio_duration": int(duration_val),
+        "time_signature": str(timesig_val),
+        "batch_size": 1,
+        "audio_format": "mp3",
+        "inference_steps": int(steps_val),
+        "guidance_scale": float(cfg_val),
+    }
+    if bpm_val is not None:
+        ace_payload["bpm"] = int(bpm_val)
+    if keyscale_val is not None:
+        ace_payload["key_scale"] = str(keyscale_val)
+    if seed_val is not None:
+        ace_payload["seed"] = int(seed_val)
+
+    # 1. Submit task
+    await job_manager.update(job, progress=0.05, message="ACE-Step API: タスク送信中")
+    try:
+        resp = await asyncio.to_thread(
+            requests.post,
+            f"{ACE_STEP_URL}/release_task",
+            json=ace_payload,
+            timeout=REQUEST_TIMEOUT_SEC,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"ACE-Step API 接続エラー ({ACE_STEP_URL}): {exc}") from exc
+    if not resp.ok:
+        raise RuntimeError(f"ACE-Step API release_task 失敗: {resp.status_code} {resp.text[:500]}")
+
+    result_data = resp.json()
+    task_id = (result_data.get("data") or {}).get("task_id", "")
+    if not task_id:
+        raise RuntimeError(f"ACE-Step API: task_id が返されませんでした: {result_data}")
+
+    # 2. Poll for completion
+    await job_manager.update(job, progress=0.10, message="ACE-Step API: 生成中...")
+    timeout_sec = 60 * 15  # 15 min (thinking mode can be slow)
+    deadline = time.time() + timeout_sec
+    poll_interval = 3.0
+    start_time = time.time()
+
+    while time.time() < deadline:
+        try:
+            poll_resp = await asyncio.to_thread(
+                requests.post,
+                f"{ACE_STEP_URL}/query_result",
+                json={"task_id_list": [task_id]},
+                timeout=30,
+            )
+        except Exception:
+            # Transient connection error – retry on next poll
+            await asyncio.sleep(poll_interval)
+            continue
+
+        if poll_resp.ok:
+            poll_data = poll_resp.json()
+            data_list = poll_data.get("data", [])
+            if data_list:
+                task_data = data_list[0]
+                status = task_data.get("status", 0)
+
+                if status == 1:  # succeeded
+                    result_json = task_data.get("result", "[]")
+                    if isinstance(result_json, str):
+                        results = json.loads(result_json)
+                    else:
+                        results = result_json
+
+                    # Download audio files to local output/audio/
+                    audio_dir = OUTPUT_DIR / "audio"
+                    audio_dir.mkdir(parents=True, exist_ok=True)
+                    outputs: List[Dict[str, Any]] = []
+                    for r in (results if isinstance(results, list) else [results]):
+                        file_path = r.get("file", "")
+                        if not file_path:
+                            continue
+                        audio_url = f"{ACE_STEP_URL}{file_path}"
+                        local_name = f"ace_step_{task_id}_{Path(file_path).name}"
+                        local_path = audio_dir / local_name
+                        try:
+                            dl_resp = await asyncio.to_thread(requests.get, audio_url, timeout=60)
+                            if dl_resp.ok:
+                                local_path.write_bytes(dl_resp.content)
+                                outputs.append({
+                                    "filename": local_name,
+                                    "subfolder": "audio",
+                                    "type": "output",
+                                })
+                        except Exception as dl_exc:
+                            print(f"[ace-step] ⚠️ 音声ダウンロード失敗: {audio_url}: {dl_exc}", file=sys.stderr)
+
+                    if not outputs:
+                        raise RuntimeError("ACE-Step API: 生成完了したがオーディオファイルを取得できませんでした")
+
+                    return {"prompt_id": task_id, "outputs": outputs}
+
+                elif status == 2:  # failed
+                    error_msg = task_data.get("result", "Unknown error")
+                    if isinstance(error_msg, (list, dict)):
+                        error_msg = json.dumps(error_msg, ensure_ascii=False)[:300]
+                    raise RuntimeError(f"ACE-Step API 生成失敗: {error_msg}")
+
+        # Progress estimation
+        elapsed = time.time() - start_time
+        expected_duration = 600.0 if thinking else 60.0  # rough estimate
+        progress = min(0.95, 0.10 + 0.85 * (elapsed / expected_duration))
+        await job_manager.update(job, progress=max(job.progress, progress), message="ACE-Step API: 生成中...")
+        await asyncio.sleep(poll_interval)
+
+    raise RuntimeError("ACE-Step API: タイムアウト (15分)")
 
 
 async def _interrupt_comfyui(prompt_id: Optional[str]) -> None:
@@ -1754,7 +1901,59 @@ def _parse_lyrics_response(raw_response: str) -> tuple[Optional[int], Optional[D
 
     lyrics = re.sub(r"^```\w*\n?", "", lyrics)
     lyrics = re.sub(r"\n?```$", "", lyrics).strip()
+    lyrics = _strip_romaji_lines(lyrics)
     return recommended, parts, lyrics
+
+
+def _strip_romaji_lines(text: str) -> str:
+    """Remove parenthesized romaji transliteration lines from Japanese lyrics.
+
+    LLMs sometimes add lines like ``(Sabita tetsu no nioi ga hana o sasu)``
+    after each Japanese line.  These are not singable and break ACE-Step.
+    We detect them as lines that:
+      - are wrapped in parentheses ``(...)``
+      - contain only ASCII letters, spaces, basic punctuation, and
+        common romaji tokens (no CJK / kana / hangul).
+    Lines with ``[inst]``, ``[intro]``, stage directions containing
+    non-romaji musical terms (e.g. ``(Piano & fading music box)``) are
+    preserved by a heuristic: if the line looks like a stage/instrument
+    direction (contains common music keywords) we keep it.
+    """
+    if not text:
+        return text
+
+    _MUSIC_DIRECTION_RE = re.compile(
+        r"(?i)\b(?:guitar|bass|drum|drums|piano|synth|strings|orchestra|violin|cello|"
+        r"sax|saxophone|trumpet|flute|organ|harp|bell|chime|choir|vocal|voice|"
+        r"melody|riff|solo|fade|fading|intro|outro|bridge|break|clap|snap|"
+        r"beat|rhythm|ambient|atmospheric|distort|acoustic|electric|music|box|"
+        r"instrumental|interlude|harmonics|whistle|percussion)\b"
+    )
+
+    # A romaji line: wrapped in parens, content is purely ASCII-range
+    # (latin letters, spaces, punctuation, digits — no CJK/kana/hangul).
+    _ROMAJI_PAREN_RE = re.compile(
+        r"^\(\s*[A-Za-z][A-Za-z0-9\s,.'\-!?ōūēāīôûêâîō]+\s*\)$"
+    )
+
+    out_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            out_lines.append(line)
+            continue
+        if _ROMAJI_PAREN_RE.match(stripped):
+            # Keep music/instrument stage directions
+            if _MUSIC_DIRECTION_RE.search(stripped):
+                out_lines.append(line)
+            # else: drop the romaji transliteration line
+        else:
+            out_lines.append(line)
+
+    result = "\n".join(out_lines)
+    # Collapse 3+ consecutive blank lines into 2
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
 
 
 def _generate_spec(
@@ -2149,6 +2348,8 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             "Output format:\n"
             "1) First line JSON: {\"recommended_duration\": <int>, \"parts\": {...}}\n"
             "2) Lyrics with [intro]/[verse]/[chorus]/[bridge]/[outro]/[inst] tags\n"
+            "IMPORTANT: Do NOT add romaji/romanization lines. Write lyrics in the target language only. "
+            "For Japanese, write only Japanese text — no parenthesized romanized readings.\n"
             "No explanations."
         )
         try:
@@ -2338,6 +2539,11 @@ async def on_startup() -> None:
     print(f"  VLM  (画像解析)  : {_vlm_url}")
     print(f"  VLM  モデル       : {VLM_MODEL}")
     print(_sep)
+    if ACE_STEP_URL:
+        print(f"  ACE-Step API     : {ACE_STEP_URL}  (thinking / AI Tag 対応)")
+    else:
+        print(f"  ACE-Step API     : (未設定 → ComfyUI ワークフローで T2A)")
+    print(_sep)
     print(f"  ワークフロー      : {WORKFLOWS_DIR}  ({sum(1 for _ in WORKFLOWS_DIR.glob('*.json'))} 件)")
     print(f"  アプリ データ     : {APP_DATA_DIR}")
     print(f"{_sep}\n")
@@ -2372,7 +2578,51 @@ def health() -> Dict[str, Any]:
         "comfy_input_dir": str(COMFY_INPUT_DIR),
         "comfy_output_dir": str(COMFY_OUTPUT_DIR),
         "workflows_dir": str(WORKFLOWS_DIR),
+        "ace_step_api_url": ACE_STEP_URL or None,
     }
+
+
+# =============================================================================
+# ACE-Step API proxy endpoints (active only when ACE_STEP_URL is set)
+# =============================================================================
+
+class AceStepFormatInputRequest(BaseModel):
+    prompt: str = ""
+    lyrics: str = ""
+    temperature: float = 0.85
+
+
+@app.post("/api/v1/ace_step/format_input")
+async def ace_step_format_input(request: AceStepFormatInputRequest) -> Dict[str, Any]:
+    """Proxy to ACE-Step API /format_input for AI tag/caption enhancement."""
+    if not ACE_STEP_URL:
+        raise HTTPException(status_code=503, detail="ACE-Step API is not configured (--ace-step-url)")
+    try:
+        resp = await asyncio.to_thread(
+            requests.post,
+            f"{ACE_STEP_URL}/format_input",
+            json={"prompt": request.prompt, "lyrics": request.lyrics, "temperature": request.temperature},
+            timeout=60,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"ACE-Step API 接続エラー: {exc}")
+    if not resp.ok:
+        raise HTTPException(status_code=502, detail=f"ACE-Step API error: {resp.status_code} {resp.text[:500]}")
+    return resp.json()
+
+
+@app.get("/api/v1/ace_step/health")
+async def ace_step_health() -> Dict[str, Any]:
+    """Check ACE-Step API server availability."""
+    if not ACE_STEP_URL:
+        return {"available": False, "reason": "ACE_STEP_API_URL not configured"}
+    try:
+        resp = await asyncio.to_thread(requests.get, f"{ACE_STEP_URL}/health", timeout=10)
+        if resp.ok:
+            return {"available": True, "url": ACE_STEP_URL, "server_info": resp.json()}
+        return {"available": False, "reason": f"HTTP {resp.status_code}", "url": ACE_STEP_URL}
+    except Exception as exc:
+        return {"available": False, "reason": str(exc), "url": ACE_STEP_URL}
 
 
 @app.post("/api/v1/generate")
