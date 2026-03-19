@@ -9502,6 +9502,40 @@ async function removeBackgroundIfEnabled(inputFilename, forceRun = false) {
     return String(imgOut.filename);
 }
 
+/**
+ * Show a modal dialog asking whether to reference the current key image
+ * during initial image generation.
+ * @returns {Promise<'reference'|'clear'|'cancel'>}
+ */
+function showKeyImageReferenceDialog() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#1e1e2e;color:#e0e0e0;border-radius:10px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.5);font-family:inherit;';
+        box.innerHTML = `
+            <div style="font-size:15px;font-weight:600;margin-bottom:12px;">🖼️ キー画像の参照確認</div>
+            <div style="font-size:13px;line-height:1.6;margin-bottom:18px;">
+                現在キー画像が設定されています。<br>
+                初期画像生成でキー画像を参照しますか？<br>
+                <span style="color:#aaa;font-size:12px;">（参照すると I2I Edit として生成されます）</span>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+                <button id="_keyRefDlgCancel" style="padding:7px 16px;border-radius:6px;border:1px solid #555;background:#333;color:#ccc;cursor:pointer;font-size:13px;">キャンセル</button>
+                <button id="_keyRefDlgClear" style="padding:7px 16px;border-radius:6px;border:1px solid #e8a735;background:#4a3a10;color:#f0d060;cursor:pointer;font-size:13px;">参照せず生成（キー画像クリア）</button>
+                <button id="_keyRefDlgRef" style="padding:7px 16px;border-radius:6px;border:none;background:#2563eb;color:#fff;cursor:pointer;font-size:13px;font-weight:600;">参照して生成</button>
+            </div>`;
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cleanup = () => { overlay.remove(); };
+        box.querySelector('#_keyRefDlgRef').addEventListener('click', () => { cleanup(); resolve('reference'); });
+        box.querySelector('#_keyRefDlgClear').addEventListener('click', () => { cleanup(); resolve('clear'); });
+        box.querySelector('#_keyRefDlgCancel').addEventListener('click', () => { cleanup(); resolve('cancel'); });
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); resolve('cancel'); } });
+    });
+}
+
 async function startInitialImageGeneration() {
     const { state } = SimpleVideoUI;
     const isBusy = !!(state.isGenerating || state.isPromptGenerating || state.isImageGenerating);
@@ -9517,6 +9551,26 @@ async function startInitialImageGeneration() {
     if (!api || typeof api.generate !== 'function' || typeof api.monitorProgress !== 'function') {
         if (typeof showToast === 'function') showToast('APIが利用できません（app.api.generate/monitorProgress）', 'error');
         return;
+    }
+
+    // --- Key image reference confirmation dialog ---
+    const hasKeyImage = !!(state.uploadedImage?.filename || state.keyImage?.filename);
+    if (hasKeyImage) {
+        const choice = await showKeyImageReferenceDialog();
+        if (choice === 'cancel') return;
+        if (choice === 'clear') {
+            // Same cleanup as clearKeyImage() but without toast
+            state.keyImage = null;
+            state.uploadedImage = null;
+            state.preparedVideoInitialImage = null;
+            state.intermediateImages = null;
+            state.characterImage = null;
+            saveSimpleVideoState();
+            updateSimpleVideoUI();
+            updateGenerateButtonState();
+            if (typeof showToast === 'function') showToast('キー画像をクリアして生成します（T2Iモード）', 'info');
+        }
+        // choice === 'reference' → proceed with key image intact
     }
 
     const preset = VIDEO_PRESETS.find((p) => p.id === state.selectedPreset) || null;
