@@ -1816,7 +1816,6 @@ function renderSimpleVideoUI() {
             <div class="simple-video-section-title with-actions" id="simpleVideoVideoSettingsTitle" style="cursor:pointer;">
                 <span class="title-left"><i class="fas fa-cog"></i> ⚙️ 動画設定 <span id="simpleVideoVideoSettingsToggleIcon">▼</span></span>
                 <div class="simple-video-scenario-actions">
-                    <button class="simple-video-icon-btn" id="simpleVideoSettingsBtn" type="button" title="詳細設定">⚙️</button>
                     <button class="simple-video-icon-btn" id="simpleVideoResetSettingsBtn" type="button" title="設定をデフォルト値に戻す">🔄</button>
                     <button class="simple-video-icon-btn" id="simpleVideoClearStorageBtn" type="button" title="ブラウザメモリを完全にクリア（全状態を削除してリロード）" style="color:#e55;">🗑️</button>
                 </div>
@@ -1883,6 +1882,10 @@ function renderSimpleVideoUI() {
             <div class="simple-video-hint" id="simpleVideoCurrentRefHint">参照: -</div>
             <div class="simple-video-current-ref-preview" id="simpleVideoCurrentRefPreview" style="display:none;" aria-label="現在参照中の画像プレビュー">
                 <img id="simpleVideoCurrentRefPreviewImg" alt="current reference" />
+            </div>
+
+            <div style="margin:6px 0 4px;">
+                <button class="simple-video-btn" id="simpleVideoSettingsBtn" type="button" style="font-size:12px;padding:4px 12px;">⚙️ 詳細設定</button>
             </div>
 
             <div class="simple-video-advanced-settings" id="simpleVideoAdvancedSettings" style="display:none;">
@@ -6950,8 +6953,12 @@ function updateSimpleVideoUI() {
     }
 
     const adv = document.getElementById('simpleVideoAdvancedSettings');
+    const advBtn = document.getElementById('simpleVideoSettingsBtn');
     if (adv) {
         adv.style.display = state.showAdvancedSettings ? '' : 'none';
+    }
+    if (advBtn) {
+        advBtn.textContent = state.showAdvancedSettings ? '⚙️ 詳細設定 ▼' : '⚙️ 詳細設定 ▶';
     }
 
     // Restore internal images section accordion state
@@ -7202,6 +7209,15 @@ async function generateSimpleVideoScenarioFromIdea() {
         btn.style.opacity = '0.6';
     }
 
+    // Append key image analysis to idea if checkbox is checked
+    let augmentedIdea = idea;
+    const analysisToScenarioCb = document.getElementById('simpleVideoKeyImageAnalysisToScenario');
+    const analysisText = String(state.keyImageAnalysis || '').trim();
+    if (analysisToScenarioCb?.checked && analysisText) {
+        augmentedIdea = `${idea}\n\n[参照画像の解析結果]\n${analysisText}`;
+        console.log('[SimpleVideo] シナリオ作成にキー画像解析結果を付加');
+    }
+
     const cancelSeqAtStart = Number(state.cancelSeq) || 0;
     state.isPromptGenerating = true;
     saveSimpleVideoState();
@@ -7213,7 +7229,7 @@ async function generateSimpleVideoScenarioFromIdea() {
     try {
         const requestBody = {
             workflow: 'scenario_generate',
-            user_prompt: idea,
+            user_prompt: augmentedIdea,
             prompt_complexity: normalizePromptComplexity(state.promptComplexity || 'standard'),
             scene_variation: resolveScenarioVariationForCurrentPreset(),
         };
@@ -12133,6 +12149,20 @@ async function determineScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeq
             throw new Error('指定シーン再生成に必要なシーンプロンプトが不足しています');
         }
         scenePrompts = ['scene'];
+    }
+
+    // Inject key image analysis into each scene prompt if checkbox is checked
+    const analysisInjectCb = document.getElementById('simpleVideoKeyImageAnalysisInject');
+    const analysisText = String(state.keyImageAnalysis || '').trim();
+    if (analysisInjectCb?.checked && analysisText) {
+        scenePrompts = scenePrompts.map((p) => {
+            const base = String(p || '').trim();
+            if (!base) return analysisText;
+            // Avoid duplicate injection
+            if (base.includes(analysisText)) return base;
+            return `${base}, ${analysisText}`;
+        });
+        console.log('[SimpleVideo] シーンプロンプトにキー画像解析結果をインジェクション');
     }
 
     if (requireExistingPrompts && scenePrompts.length < desiredCount) {
