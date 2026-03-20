@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v94.0
+Version: v0.95.0
 
 License: [MIT](./LICENSE)
 
@@ -10,7 +10,7 @@ Language: 日本語 | [English](./README_EN.md)
 
 公開リポジトリ向けに、利用者が必要な情報（導入・実行・操作・制約）に限定して記載しています。
 
-## v94.0 の価値
+## v0.95.0 の価値
 
 - **1つのUIで完結**: 画像（T2I/I2I）→ 動画（T2V/I2V/FLF）→ 音楽（T2A）→ 合成（M2V/V2M）
 - **プロンプト作業を短縮**: `🧠 シナリオ作成` → `🤖 プロンプト生成` の2ステップ

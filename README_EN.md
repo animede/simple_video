@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v94.0
+Version: v0.95.0
 
 License: [MIT](./LICENSE)
 

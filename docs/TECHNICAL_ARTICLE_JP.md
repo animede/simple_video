@@ -107,11 +107,12 @@ Files一覧APIは `simple_video_app/output` 配下を対象にし、
 3. I2I workflow実行（必要に応じて複数画像参照）
 4. 生成画像を次工程（動画化）へ連結
 
-## 4.3 動画生成（T2V / I2V / FLF）
+## 4.3 動画生成（T2V / I2V / FLF / 混在トランジション）
 
 - T2V: シナリオやシーンプロンプトから動画生成
 - I2V: 画像を起点に動画化
 - FLF: 最初/最後フレームの整合性を保つ連続化
+- **混在トランジション** (`mixedTransitions: true`): LLM がシーン間の関係を判定し、FLF / I2V / カット等を境界ごとに自動割り当て。`renderTransitionEditor()` でユーザーが事後調整可能。
 
 生成結果は主に `output/video` へ格納され、再結合（concat）にも利用されます。
 

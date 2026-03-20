@@ -7040,7 +7040,7 @@ body.simple-video-enabled #simpleVideoLeft {
     width: 100%;
     padding: 10px 12px;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.65);
     border: 1px solid rgba(255, 255, 255, 0.12);
     color: var(--text-primary);
     font-size: 13px;
@@ -8281,6 +8281,163 @@ body.simple-video-enabled #simpleVideoLeft {
 .simple-video-generated-prompts-text {
     min-height: 120px;
     max-height: 240px;
+}
+
+/* ---- Transition Editor (Phase 2 Layer 5-6) ---- */
+.simple-video-transition-editor {
+    margin-top: 8px;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.simple-video-transition-accordion-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: left;
+    transition: background 0.15s;
+}
+.simple-video-transition-accordion-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.simple-video-transition-accordion-arrow {
+    font-size: 10px;
+    color: var(--text-secondary);
+    min-width: 12px;
+}
+.simple-video-transition-summary {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.simple-video-transition-body {
+    padding: 4px 10px 8px;
+}
+
+.simple-video-transition-editor-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.simple-video-transition-editor-hint {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.simple-video-transition-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.simple-video-transition-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.simple-video-transition-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.simple-video-transition-scene-num {
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 28px;
+    text-align: right;
+}
+
+.simple-video-transition-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    min-width: 56px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Badge color variants */
+.transition-none {
+    background: rgba(100, 116, 139, 0.25);
+    color: #94a3b8;
+    border: 1px solid rgba(100, 116, 139, 0.4);
+}
+
+.transition-flf {
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.5);
+}
+
+.transition-cut {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+}
+
+.transition-crossfade {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+    border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.transition-fade-black {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fcd34d;
+    border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.simple-video-transition-select {
+    padding: 1px 4px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 10px;
+    min-width: 90px;
+    cursor: pointer;
+}
+
+.simple-video-transition-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.simple-video-transition-prompt-snippet {
+    font-size: 10px;
+    color: var(--text-secondary);
+    opacity: 0.6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
 }
 
 /* Output area */

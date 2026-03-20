@@ -113,6 +113,21 @@ const VIDEO_PRESETS = [
         ]
     },
     {
+        id: 'ext_i2i_i2v_mixed',
+        name: '🖼️→🖼️→🎬🔀 キー画像参照 動画（I2I + 混在トランジション）',
+        description: 'キー画像を参照にI2Iでシーン画像生成(N+1枚)→LLMがシーン関係を判定し、FLF/I2V/カット/フェードを自動混在',
+        icon: '🔀',
+        requiresImage: true,
+        requiresCharacter: false,
+        supportsPregenerateImages: true,
+        mixedTransitions: true,  // FLF/I2V混在パイプライン（画像はN+1枚）
+        steps: [
+            { workflow: 'qwen_i2i_2512_lightning4', label: 'シーン画像生成(I2I)' },
+            { workflow: 'wan22_i2v_lightning', label: 'シーンI2V' },
+            { workflow: 'wan22_smooth_first2last', label: 'FLF遷移' }
+        ]
+    },
+    {
         id: 'char_i2i_flf',
         name: '📷→🖼️→🎬 キャラクター動画（I2I + FLF）--連続長尺動画',
         description: 'キー画像を参照して各シーン画像をI2Iで作成→全区間FLFで遷移動画を生成（I2V不要・高速）',
@@ -157,6 +172,24 @@ const VIDEO_PRESETS = [
             { workflow: 'qwen_i2i_2511_bf16_lightning4', label: 'キャラ合成画像(EDIT)' },
             { workflow: 'qwen_i2i_2512_lightning4', label: 'シーン画像生成(I2I)' },
             { workflow: 'wan22_i2v_lightning', label: 'シーンI2V' }
+        ]
+    },
+    {
+        id: 'char_edit_i2v_mixed',
+        name: '📷→🖼️(EDIT)→🖼️→🎬🔀 キャラクター動画（合成+混在トランジション）',
+        description: 'EDITプロンプトで合成→I2Iでシーン画像→LLMがシーン関係を判定し、FLF/I2V/カット/フェードを自動混在',
+        icon: '🔀',
+        requiresImage: true,
+        requiresCharacter: true,
+        requiresCharacterImage: true,
+        supportsRefSourceSelect: true,
+        supportsPregenerateImages: true,
+        mixedTransitions: true,  // FLF/I2V混在パイプライン（画像はN+1枚）
+        steps: [
+            { workflow: 'qwen_i2i_2511_bf16_lightning4', label: 'キャラ合成画像(EDIT)' },
+            { workflow: 'qwen_i2i_2512_lightning4', label: 'シーン画像生成(I2I)' },
+            { workflow: 'wan22_i2v_lightning', label: 'シーンI2V' },
+            { workflow: 'wan22_smooth_first2last', label: 'FLF遷移' }
         ]
     }
 ];
@@ -592,6 +625,11 @@ const SimpleVideoUI = {
         ltxVariant: 'fp4',          // 'fp4' | 'distilled'（default FP4）
         generateAudio: false,       // 音声も生成（default OFF / currently informational)
 
+        // Scene transition (xfade)
+        xfadeEnabled: false,        // ffmpeg xfade トランジション（default OFF）
+        xfadeType: 'fade',          // 'fade' | 'dissolve' | 'wipeleft' | 'wiperight' | 'wipeup' | 'wipedown' | 'slideleft' | 'slideright'
+        xfadeDuration: '0.5',       // トランジション秒数
+
         // Left-column BGM generation (ACE-Step 1.5 T2A)
         t2aScenario: '',
         t2aTags: '',
@@ -671,6 +709,10 @@ const SimpleVideoUI = {
         // Per-scene generated video basenames for concat/reconcat.
         // { presetId: string, videos: Array<null|string> }
         sceneVideos: null,
+
+        // Per-scene transition types from LLM (Phase 2).
+        // Array<string> e.g. ['none', 'flf', 'cut', 'crossfade', 'fade_black']
+        sceneTransitions: null,
 
         // Internal: reversible LTX FPS forcing
         ltxFpsForced: false,
@@ -800,6 +842,11 @@ function loadSimpleVideoState() {
             SimpleVideoUI.state.ltxVariant = normalizeLtxVariant(parsed.ltxVariant);
             SimpleVideoUI.state.generateAudio = !!parsed.generateAudio;
 
+            // xfade transition
+            SimpleVideoUI.state.xfadeEnabled = !!parsed.xfadeEnabled;
+            SimpleVideoUI.state.xfadeType = String(parsed.xfadeType || 'fade');
+            SimpleVideoUI.state.xfadeDuration = String(parsed.xfadeDuration || '0.5');
+
             // Left-column BGM generation (ACE-Step 1.5 T2A)
             SimpleVideoUI.state.t2aScenario = String(parsed.t2aScenario || '');
             SimpleVideoUI.state.t2aTags = String(parsed.t2aTags || '');
@@ -854,6 +901,7 @@ function loadSimpleVideoState() {
 
             SimpleVideoUI.state.intermediateImages = normalizeIntermediateImages(parsed.intermediateImages);
             SimpleVideoUI.state.sceneVideos = normalizeSceneVideos(parsed.sceneVideos);
+            SimpleVideoUI.state.sceneTransitions = Array.isArray(parsed.sceneTransitions) ? parsed.sceneTransitions : null;
 
             // Character composite image for char_edit_i2i_flf preset
             SimpleVideoUI.state.characterImage = normalizeCharacterImage(parsed.characterImage);
@@ -1103,7 +1151,7 @@ function resolveScenarioVariationForCurrentPreset() {
 }
 
 function resolveFLFMotionLevelForPromptGeneration({ outputType, motionStrength, presetId }) {
-    if (String(outputType || '') !== 'flf_sequence') return null;
+    if (String(outputType || '') !== 'flf_sequence' && String(outputType || '') !== 'mixed_sequence') return null;
     const normalized = normalizeMotionStrength(motionStrength || 'medium');
     if (isContinuousLongPreset(presetId) && normalized === 'medium') return 'small';
     return normalized;
@@ -1302,6 +1350,11 @@ function saveSimpleVideoState() {
             ltxVariant: normalizeLtxVariant(SimpleVideoUI.state.ltxVariant),
             generateAudio: !!SimpleVideoUI.state.generateAudio,
 
+            // xfade transition
+            xfadeEnabled: !!SimpleVideoUI.state.xfadeEnabled,
+            xfadeType: String(SimpleVideoUI.state.xfadeType || 'fade'),
+            xfadeDuration: String(SimpleVideoUI.state.xfadeDuration || '0.5'),
+
             // Left-column BGM generation (ACE-Step 1.5 T2A)
             t2aScenario: String(SimpleVideoUI.state.t2aScenario || ''),
             t2aTags: String(SimpleVideoUI.state.t2aTags || ''),
@@ -1337,6 +1390,7 @@ function saveSimpleVideoState() {
             // Intermediate images for FLF pipelines
             intermediateImages: SimpleVideoUI.state.intermediateImages,
             sceneVideos: SimpleVideoUI.state.sceneVideos,
+            sceneTransitions: SimpleVideoUI.state.sceneTransitions,
 
             // Character composite image for char_edit_i2i_flf preset
             characterImage: SimpleVideoUI.state.characterImage,
@@ -1810,6 +1864,36 @@ function renderSimpleVideoUI() {
                 </select>
             </div>
             <div class="simple-video-hint" id="simpleVideoSequenceDesc">${''}</div>
+            <div class="simple-video-sequence-flags" id="simpleVideoXfadeFlags" style="margin-top:6px;">
+                <label class="simple-video-sequence-flag" title="シーン間にトランジション効果を挿入します（ffmpeg xfade）">
+                    <input type="checkbox" id="simpleVideoOptXfade" />
+                    <span>🔀 トランジション</span>
+                </label>
+                <label class="simple-video-sequence-flag" id="simpleVideoXfadeTypeLabel" style="display:none;" title="トランジション効果の種類">
+                    <span>効果</span>
+                    <select class="simple-video-select" id="simpleVideoXfadeType" style="min-width:120px;">
+                        <option value="fade" selected>フェード</option>
+                        <option value="dissolve">ディゾルブ</option>
+                        <option value="wipeleft">ワイプ左</option>
+                        <option value="wiperight">ワイプ右</option>
+                        <option value="wipeup">ワイプ上</option>
+                        <option value="wipedown">ワイプ下</option>
+                        <option value="slideleft">スライド左</option>
+                        <option value="slideright">スライド右</option>
+                    </select>
+                </label>
+                <label class="simple-video-sequence-flag" id="simpleVideoXfadeDurationLabel" style="display:none;" title="トランジションの長さ（秒）">
+                    <span>秒数</span>
+                    <select class="simple-video-select" id="simpleVideoXfadeDuration" style="min-width:70px;">
+                        <option value="0.3">0.3s</option>
+                        <option value="0.5" selected>0.5s</option>
+                        <option value="0.8">0.8s</option>
+                        <option value="1.0">1.0s</option>
+                        <option value="1.5">1.5s</option>
+                    </select>
+                </label>
+                <button class="simple-video-icon-btn" id="simpleVideoReconcatBtn" type="button" style="display:none; margin-left:8px; font-size:0.85em; padding:2px 8px;" title="現在のトランジション設定でシーン動画を再結合します">🔗 再結合</button>
+            </div>
         </div>
 
         <div class="simple-video-section simple-video-section-video-settings">
@@ -2063,6 +2147,7 @@ function renderSimpleVideoUI() {
                     <button class="simple-video-settings-btn simple-video-inline-btn" id="simpleVideoGeneratedTranslateBtn" type="button" title="生成プロンプトを翻訳（英⇔日）">🌐 翻訳</button>
                 </div>
                 <textarea class="simple-video-prompt simple-video-generated-prompts-text" id="simpleVideoLLMPrompt" placeholder="（生成されたプロンプトがここに表示されます）"></textarea>
+                <div id="simpleVideoTransitionEditor" class="simple-video-transition-editor" style="display:none;"></div>
             </div>
         </div>
         </div>
@@ -2327,6 +2412,57 @@ function attachSimpleVideoEventListeners() {
             SimpleVideoUI.state.generateAudio = !!e.target.checked;
             saveSimpleVideoState();
             updateSimpleVideoUI();
+        });
+    }
+
+    // xfade transition controls
+    const xfadeCb = document.getElementById('simpleVideoOptXfade');
+    const xfadeTypeSel = document.getElementById('simpleVideoXfadeType');
+    const xfadeDurSel = document.getElementById('simpleVideoXfadeDuration');
+    if (xfadeCb) {
+        xfadeCb.addEventListener('change', (e) => {
+            SimpleVideoUI.state.xfadeEnabled = !!e.target.checked;
+            saveSimpleVideoState();
+            updateSimpleVideoUI();
+        });
+    }
+    if (xfadeTypeSel) {
+        xfadeTypeSel.addEventListener('change', (e) => {
+            SimpleVideoUI.state.xfadeType = String(e.target.value || 'fade');
+            saveSimpleVideoState();
+        });
+    }
+    if (xfadeDurSel) {
+        xfadeDurSel.addEventListener('change', (e) => {
+            SimpleVideoUI.state.xfadeDuration = String(e.target.value || '0.5');
+            saveSimpleVideoState();
+        });
+    }
+
+    // Re-concat button
+    const reconcatBtn = document.getElementById('simpleVideoReconcatBtn');
+    if (reconcatBtn) {
+        reconcatBtn.addEventListener('click', async () => {
+            const { state } = SimpleVideoUI;
+            if (state.isGenerating) {
+                showToast('生成中は再結合できません', 'warning');
+                return;
+            }
+            const presetId = state.selectedPreset;
+            if (!presetId) {
+                showToast('プリセットが選択されていません', 'warning');
+                return;
+            }
+            try {
+                reconcatBtn.disabled = true;
+                await runSceneVideosConcatFromState({ presetId, title: '再結合結果' });
+                showToast('🔗 トランジション設定で再結合しました', 'success');
+            } catch (err) {
+                console.error('[reconcat]', err);
+                showToast(`再結合エラー: ${err.message || err}`, 'error');
+            } finally {
+                reconcatBtn.disabled = false;
+            }
         });
     }
 
@@ -3816,10 +3952,10 @@ function getEffectiveSceneCountForPromptGeneration() {
     const explicit = Number(state.sceneCount);
     let count = (Number.isFinite(explicit) && explicit >= 1) ? Math.min(24, Math.max(1, Math.round(explicit))) : 3;
 
-    // FLF-only presets need N+1 images (and thus N+1 prompts) to produce N FLF transition segments.
-    // The extra prompt is for the "ending" image that serves as the end frame of the last FLF.
+    // FLF-only and mixed-transition presets need N+1 images (and thus N+1 prompts).
+    // The extra prompt is for the "ending" image that serves as the end frame of the last FLF segment.
     const preset = VIDEO_PRESETS.find(p => p.id === state.selectedPreset);
-    if (preset?.flfOnly) {
+    if (preset?.flfOnly || preset?.mixedTransitions) {
         count += 1;
     }
 
@@ -3844,6 +3980,8 @@ function updateSimpleVideoDerivedTotalLength() {
 
 function pickPromptOutputTypeForPreset(preset) {
     // Full Auto uses a specialized prompt_type for FLF character video.
+    // Mixed-transition presets get a distinct output type for diverse transition selection.
+    if (preset?.mixedTransitions) return 'mixed_sequence';
     const steps = Array.isArray(preset?.steps) ? preset.steps : [];
     const hasFLF = steps.some((s) => isFLFWorkflowId(s?.workflow));
     return hasFLF ? 'flf_sequence' : 'video';
@@ -3891,6 +4029,26 @@ function extractPromptsFromPromptGenerateResult(payload) {
         }
     }
 
+    return null;
+}
+
+/**
+ * Extract per-scene transition types from prompt_generate result (Phase 2).
+ * Returns string[] like ['none','flf','cut','crossfade'] or null if not present.
+ */
+function extractTransitionsFromPromptGenerateResult(payload) {
+    const p = payload || {};
+    const candidates = [
+        p?.result?.prompts,
+        p?.result?.result?.prompts,
+        p?.prompts,
+    ];
+    for (const c of candidates) {
+        if (!Array.isArray(c) || c.length === 0) continue;
+        if (c[0] && typeof c[0] === 'object' && typeof c[0].transition === 'string') {
+            return c.map((x) => String(x.transition || '').toLowerCase()).map((t) => t || 'none');
+        }
+    }
     return null;
 }
 
@@ -4296,6 +4454,15 @@ async function generateSimpleVideoPrompts() {
             console.error('[SimpleVideo] prompt_generate raw result:', result);
             throw new Error('プロンプト生成結果の形式が不正です');
         }
+
+        // Extract per-scene transition types from LLM (Phase 2)
+        const transitions = extractTransitionsFromPromptGenerateResult(result);
+        if (transitions) {
+            state.sceneTransitions = transitions;
+            console.log('[SimpleVideo] LLM transition types:', transitions);
+        }
+        saveSimpleVideoState();
+        renderTransitionEditor();
 
         const guardrailResult = applySimpleVideoPromptGuardrails(prompts, {
             characterToken: selectedCharacterToken,
@@ -6028,7 +6195,113 @@ async function regenerateSingleSceneVideo(index) {
         const effectiveSteps = getEffectivePresetStepsForCurrentOptions(preset);
         const hasFLF = !!preset.flfOnly || effectiveSteps.some((s) => isFLFWorkflowId(s?.workflow));
 
-        if (hasFLF) {
+        if (preset.mixedTransitions) {
+            // Mixed pipeline: per-boundary FLF or I2V based on transition type
+            const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
+            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
+            const fpsRaw = Number(state.fps);
+
+            // Boundaries adjacent to changed image idx
+            const segmentIndexes = [];
+            if (idx > 0) segmentIndexes.push(idx - 1);
+            if (idx < images.length - 1) segmentIndexes.push(idx);
+
+            if (segmentIndexes.length === 0) {
+                throw new Error(`再生成対象の遷移区間がありません（#${idx + 1}）`);
+            }
+
+            let lastRes = null;
+            for (const segIdx of segmentIndexes) {
+                const transType = String(transitions[segIdx + 1] || '').toLowerCase();
+                const useFLF = (transType === 'flf');
+
+                if (useFLF) {
+                    // FLF path for this boundary
+                    const start = images[segIdx];
+                    const end = images[segIdx + 1];
+                    if (!start?.filename || !end?.filename) {
+                        throw new Error(`FLF再生成に必要な画像が不足しています（#${segIdx + 1}→#${segIdx + 2}）`);
+                    }
+
+                    const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
+                    const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
+                    const frames = getSceneFramesForIndex(segIdx, effectiveFps);
+
+                    const basePrompt = String(scenePrompts[segIdx] || '').trim();
+                    const endPrompt = String(scenePrompts[segIdx + 1] || '').trim();
+                    const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
+
+                    const params = {
+                        prompt: flfPrompt,
+                        input_image_start: String(start.filename),
+                        input_image_end: String(end.filename),
+                        fps: effectiveFps,
+                    };
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (width && height) { params.width = width; params.height = height; }
+
+                    const res = await runWorkflowStep({
+                        workflow: flfWorkflow,
+                        label: `S${segIdx + 1}→S${segIdx + 2} FLF再生成`,
+                        requestParams: params,
+                        stepIndex: segmentIndexes.indexOf(segIdx),
+                        totalSteps: segmentIndexes.length,
+                    });
+                    lastRes = res;
+
+                    const videoOut = pickBestOutput(res.outputs, 'video');
+                    const videoBase = videoOut?.filename ? String(videoOut.filename).split('/').pop() : '';
+                    if (!videoBase) throw new Error(`FLF再生成動画が取得できません（#${segIdx + 1}→#${segIdx + 2}）`);
+
+                    setSceneVideoBasenameAtIndex({ presetId: preset.id, index: segIdx, basename: videoBase });
+                } else {
+                    // I2V path for this boundary
+                    const sceneImage = images[segIdx];
+                    if (!sceneImage?.filename) {
+                        throw new Error(`I2V再生成に必要な画像がありません（#${segIdx + 1}）`);
+                    }
+
+                    const fallbackFps = getDefaultFpsForVideoWorkflow(i2vWorkflow);
+                    const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
+                    const frames = getSceneFramesForIndex(segIdx, effectiveFps);
+
+                    const params = {
+                        prompt: String(scenePrompts[segIdx] || '').trim(),
+                        input_image: String(sceneImage.filename),
+                        fps: effectiveFps,
+                    };
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
+                    if (width && height) { params.width = width; params.height = height; }
+
+                    const res = await runWorkflowStep({
+                        workflow: i2vWorkflow,
+                        label: `S${segIdx + 1} I2V再生成 [${transType || 'i2v'}]`,
+                        requestParams: params,
+                        stepIndex: segmentIndexes.indexOf(segIdx),
+                        totalSteps: segmentIndexes.length,
+                    });
+                    lastRes = res;
+
+                    const videoOut = pickBestOutput(res.outputs, 'video');
+                    const videoBase = videoOut?.filename ? String(videoOut.filename).split('/').pop() : '';
+                    if (!videoBase) throw new Error(`I2V再生成動画が取得できません（#${segIdx + 1}）`);
+
+                    setSceneVideoBasenameAtIndex({ presetId: preset.id, index: segIdx, basename: videoBase });
+                }
+            }
+
+            if (lastRes) {
+                renderSimpleVideoOutputMedia({
+                    jobId: lastRes.jobId,
+                    outputs: lastRes.outputs,
+                    title: `シーン動画 #${idx + 1} (混在再生成)`,
+                });
+            }
+        } else if (hasFLF) {
             const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
             const fpsRaw = Number(state.fps);
             const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
@@ -7033,6 +7306,33 @@ function updateSimpleVideoUI() {
         try { audio.checked = !!state.generateAudio; } catch (_e) {}
     }
 
+    // Restore xfade transition controls
+    const xfadeCbEl = document.getElementById('simpleVideoOptXfade');
+    const xfadeTypeLabel = document.getElementById('simpleVideoXfadeTypeLabel');
+    const xfadeDurLabel = document.getElementById('simpleVideoXfadeDurationLabel');
+    const xfadeTypeEl = document.getElementById('simpleVideoXfadeType');
+    const xfadeDurEl = document.getElementById('simpleVideoXfadeDuration');
+    if (xfadeCbEl) {
+        try { xfadeCbEl.checked = !!state.xfadeEnabled; } catch (_e) {}
+    }
+    if (xfadeTypeLabel) xfadeTypeLabel.style.display = state.xfadeEnabled ? '' : 'none';
+    if (xfadeDurLabel) xfadeDurLabel.style.display = state.xfadeEnabled ? '' : 'none';
+    if (xfadeTypeEl) {
+        try { xfadeTypeEl.value = String(state.xfadeType || 'fade'); } catch (_e) {}
+    }
+    if (xfadeDurEl) {
+        try { xfadeDurEl.value = String(state.xfadeDuration || '0.5'); } catch (_e) {}
+    }
+
+    // Show/hide re-concat button based on whether we have generated scene videos
+    const reconcatBtn = document.getElementById('simpleVideoReconcatBtn');
+    if (reconcatBtn) {
+        const sv = normalizeSceneVideos(state.sceneVideos);
+        const hasVideos = sv && Array.isArray(sv.videos) && sv.videos.filter(v => !!v).length >= 2
+            && String(sv.presetId || '') === String(state.selectedPreset || '');
+        reconcatBtn.style.display = hasVideos ? '' : 'none';
+    }
+
     const preset = VIDEO_PRESETS.find(p => p.id === state.selectedPreset);
     if (preset) {
         const rawSteps = Array.isArray(preset.steps) ? preset.steps : [];
@@ -7556,8 +7856,8 @@ function renderSimpleVideoIntermediateImagesUI() {
     }
 
     let desiredCount = Math.max(1, Number(SimpleVideoUI.state.sceneCount) || 1);
-    // FLF-only presets need N+1 images to produce N FLF transition segments
-    if (preset?.flfOnly) desiredCount += 1;
+    // FLF-only and mixed-transition presets need N+1 images
+    if (preset?.flfOnly || preset?.mixedTransitions) desiredCount += 1;
     const inter = ensureIntermediateImagesState({ presetId: preset.id, desiredCount });
     const images = Array.isArray(inter?.images) ? inter.images : Array(desiredCount).fill(null);
 
@@ -7570,7 +7870,7 @@ function renderSimpleVideoIntermediateImagesUI() {
             const badge = entry?.source === 'uploaded'
                 ? 'UP'
                 : (entry?.source === 'prepared' ? 'PRE' : (entry ? 'GEN' : ''));
-            const canVideoRegen = !!entry && (!preset?.flfOnly || i < (desiredCount - 1));
+            const canVideoRegen = !!entry && (!(preset?.flfOnly || preset?.mixedTransitions) || i < (desiredCount - 1));
 
             return `
                 <div class="simple-video-intermediate-tile ${has ? 'has-file' : ''}" data-index="${i}">
@@ -8262,8 +8562,8 @@ function updateGenerateButtonState() {
     // For char_edit_i2i_flf, dropSlots[0] (ref1) is used instead of key image
     const hasPreparedVideoInitialImage = !!String(state.preparedVideoInitialImage?.filename || '').trim();
     let desiredCount = Math.max(1, Number(state.sceneCount) || 1);
-    // FLF-only presets need N+1 images to produce N FLF transition segments
-    if (preset?.flfOnly) desiredCount += 1;
+    // FLF-only and mixed-transition presets need N+1 images
+    if (preset?.flfOnly || preset?.mixedTransitions) desiredCount += 1;
     const hasIntermediate = !!preset && hasCompleteIntermediateImagesForPreset({ presetId: preset.id, desiredCount });
     const dropSlots = Array.isArray(state.dropSlots) ? state.dropSlots : [];
     const hasRef1 = !!dropSlots[0]?.filename;
@@ -8328,8 +8628,9 @@ function updateGenerateButtonState() {
 
     if (videoInitBtn) {
         // Scene pre-generation button: same logic as midGenBtn
-        // Enable for char_i2i_flf, char_edit_i2i_flf, char_edit_i2v_scene_cut, or ext_i2i_i2v_scene_cut (presets with supportsPregenerateImages)
-        const isFLFPreset = String(preset?.id || '') === 'char_i2i_flf' || String(preset?.id || '') === 'char_edit_i2i_flf' || String(preset?.id || '') === 'char_edit_i2v_scene_cut';
+        // Enable for char_i2i_flf, char_edit_i2i_flf, char_edit_i2v_scene_cut, ext_i2i_i2v_scene_cut,
+        // char_edit_i2v_mixed, ext_i2i_i2v_mixed (presets with supportsPregenerateImages or mixedTransitions)
+        const isFLFPreset = String(preset?.id || '') === 'char_i2i_flf' || String(preset?.id || '') === 'char_edit_i2i_flf' || String(preset?.id || '') === 'char_edit_i2v_scene_cut' || String(preset?.id || '') === 'char_edit_i2v_mixed';
         const supportsMidGen = !!preset && (isFLFPreset || !!preset.supportsPregenerateImages);
         // For ext_i2i_i2v_scene_cut, also require key image
         // char_edit_* presets use dropSlots[0] instead of uploadedImage;
@@ -9080,7 +9381,7 @@ async function startSimpleVideoMusicToVideo() {
 
         const roundedAudioSec = Math.max(1, Math.round(audioDuration));
         const autoSceneCount = Math.max(1, Math.round(roundedAudioSec / 5));
-        const minSceneCountForPreset = preset?.flfOnly ? 2 : 1;
+        const minSceneCountForPreset = (preset?.flfOnly || preset?.mixedTransitions) ? 2 : 1;
         const currentSceneCount = Math.max(minSceneCountForPreset, Math.min(24, autoSceneCount));
         const durations = allocateM2VSceneDurations(audioDuration, currentSceneCount, { minSec: 2, baseSec: 5, maxSec: 7 });
         const avg = Math.round(durations.reduce((sum, v) => sum + v, 0) / Math.max(1, durations.length));
@@ -9093,7 +9394,7 @@ async function startSimpleVideoMusicToVideo() {
         updateSimpleVideoUI();
 
         const preparedImageFilenameForM2V = String(state.preparedVideoInitialImage?.filename || '').trim();
-        const desiredCountForM2V = preset?.flfOnly ? (currentSceneCount + 1) : currentSceneCount;
+        const desiredCountForM2V = (preset?.flfOnly || preset?.mixedTransitions) ? (currentSceneCount + 1) : currentSceneCount;
         const hasIntermediateForM2V = hasCompleteIntermediateImagesForPreset({
             presetId: String(preset.id || ''),
             desiredCount: Math.max(1, desiredCountForM2V),
@@ -10703,6 +11004,12 @@ async function loadSimpleVideoOutputFiles({ resetSelection = false, resetScroll 
     }
 }
 
+// Strip [transition=TYPE] inline tags from prompt text (Phase 2 safety)
+const _TRANSITION_TAG_RE = /\[transition\s*=\s*\w+\]\s*/gi;
+function _stripTransitionTag(text) {
+    return String(text || '').replace(_TRANSITION_TAG_RE, '').trim();
+}
+
 function parseScenePromptsFromText(text) {
     const raw = String(text || '');
     if (!raw.trim()) return [];
@@ -10718,7 +11025,7 @@ function parseScenePromptsFromText(text) {
         const m = line.match(/^(?:#|＃)\s*(\d+)\s*[:：]?\s*(.*)$/);
         if (!m) continue;
         const n = Number(m[1]);
-        const body = String(m[2] || '').trim();
+        const body = _stripTransitionTag(String(m[2] || ''));
         if (!Number.isFinite(n) || n <= 0 || !body) continue;
         numbered.push({ n, body });
     }
@@ -10850,6 +11157,15 @@ async function generateScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeqA
             console.error('[SimpleVideo] prompt_generate raw result:', result);
             throw new Error('プロンプト生成結果の形式が不正です');
         }
+
+        // Extract per-scene transition types from LLM (Phase 2)
+        const transitions = extractTransitionsFromPromptGenerateResult(result);
+        if (transitions) {
+            state.sceneTransitions = transitions;
+            console.log('[SimpleVideo] LLM transition types (auto):', transitions);
+        }
+        saveSimpleVideoState();
+        renderTransitionEditor();
 
         // Prompt generation finished; clear active job marker before starting actual generation jobs.
         if (String(state.activeJobId || '') === String(jobId)) {
@@ -11149,6 +11465,7 @@ function buildI2IStillPromptConvertHint({ isQwenEdit, refRole }) {
 
 function clearSimpleVideoGeneratedPrompts() {
     SimpleVideoUI.state.llmPrompt = '';
+    SimpleVideoUI.state.sceneTransitions = null;
     saveSimpleVideoState();
 
     const llmPromptEl = document.getElementById('simpleVideoLLMPrompt');
@@ -11171,6 +11488,146 @@ function syncGeneratedPromptsVisibility() {
     if (progressWrap) {
         progressWrap.style.display = (hasPrompts || isBusy) ? '' : 'none';
     }
+
+    renderTransitionEditor();
+}
+
+/**
+ * Transition type display labels and color classes.
+ */
+const _TRANSITION_TYPE_META = {
+    none:       { label: '―',          labelEn: '―',          cls: 'transition-none' },
+    flf:        { label: 'FLF遷移',    labelEn: 'FLF',        cls: 'transition-flf' },
+    cut:        { label: 'カット',      labelEn: 'Cut',        cls: 'transition-cut' },
+    crossfade:  { label: 'クロスフェード', labelEn: 'Crossfade', cls: 'transition-crossfade' },
+    fade_black: { label: 'フェード黒',  labelEn: 'Fade Black', cls: 'transition-fade-black' },
+};
+const _TRANSITION_TYPES_ALL = ['none', 'flf', 'cut', 'crossfade', 'fade_black'];
+
+/**
+ * Render (or hide) the per-scene transition editor below the generated prompts textarea.
+ * Shows one row per scene with a colored badge + dropdown to change the transition type.
+ * Only visible when sceneTransitions is available and the current preset uses flf_sequence output.
+ */
+function renderTransitionEditor() {
+    const container = document.getElementById('simpleVideoTransitionEditor');
+    if (!container) return;
+
+    const state = SimpleVideoUI?.state || {};
+    const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : null;
+    const hasPrompts = !!String(state.llmPrompt || '').trim();
+
+    // Show for FLF, mixed-transition, or any preset with FLF steps that has transitions
+    const preset = VIDEO_PRESETS.find(p => p.id === state.selectedPreset);
+    const isFLF = preset && (preset.flfOnly || preset.mixedTransitions || (Array.isArray(preset.steps) && preset.steps.some(s => isFLFWorkflowId(s?.workflow))));
+
+    if (!transitions || transitions.length === 0 || !hasPrompts) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    container.style.display = '';
+    const lang = normalizeSimpleVideoUiLanguage(state.uiLanguage);
+    const isJa = lang === 'ja';
+
+    // Parse scene prompts to get scene count (for label alignment)
+    const scenePrompts = parseScenePromptsFromText(state.llmPrompt);
+    const sceneCount = Math.max(transitions.length, scenePrompts.length);
+
+    // Preserve accordion open/close state (default: collapsed)
+    const wasOpen = container.querySelector('.simple-video-transition-body')?.style.display !== 'none'
+        && container.querySelector('.simple-video-transition-body') !== null;
+    const isOpen = container.dataset.accordionOpen === '1' || wasOpen;
+
+    // Build summary badge counts for the header
+    const typeCounts = {};
+    for (let i = 1; i < sceneCount; i++) {
+        const t = (transitions[i] || 'none').toLowerCase();
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+    const summaryParts = [];
+    for (const tt of _TRANSITION_TYPES_ALL) {
+        if (typeCounts[tt]) {
+            const meta = _TRANSITION_TYPE_META[tt] || _TRANSITION_TYPE_META.none;
+            summaryParts.push(`<span class="simple-video-transition-badge ${meta.cls}" style="font-size:9px;padding:0 5px;">${isJa ? meta.label : meta.labelEn} ×${typeCounts[tt]}</span>`);
+        }
+    }
+    const summaryHtml = summaryParts.length > 0 ? summaryParts.join(' ') : '';
+
+    let html = `<button type="button" class="simple-video-transition-accordion-btn" id="simpleVideoTransitionAccordionBtn">`;
+    html += `<span class="simple-video-transition-accordion-arrow">${isOpen ? '▼' : '▶'}</span>`;
+    html += `<span>${isJa ? '🔀 シーン遷移タイプ' : '🔀 Scene Transitions'}</span>`;
+    html += `<span class="simple-video-transition-editor-hint">${isJa ? 'LLMが判定した各シーン間の遷移方法' : 'Per-scene transition types determined by LLM'}</span>`;
+    html += `<span class="simple-video-transition-summary">${summaryHtml}</span>`;
+    html += `</button>`;
+    html += `<div class="simple-video-transition-body" style="display:${isOpen ? '' : 'none'};">`;
+    html += `<div class="simple-video-transition-rows">`;
+
+    for (let i = 0; i < sceneCount; i++) {
+        const t = (transitions[i] || 'none').toLowerCase();
+        const meta = _TRANSITION_TYPE_META[t] || _TRANSITION_TYPE_META.none;
+        const badgeLabel = isJa ? meta.label : meta.labelEn;
+        const sceneLabel = `#${i + 1}`;
+        const promptSnippet = (scenePrompts[i] || '').substring(0, 40) + ((scenePrompts[i] || '').length > 40 ? '…' : '');
+        const isFirst = (i === 0);
+
+        html += `<div class="simple-video-transition-row">`;
+        html += `  <span class="simple-video-transition-scene-num">${sceneLabel}</span>`;
+        html += `  <span class="simple-video-transition-badge ${meta.cls}">${badgeLabel}</span>`;
+        html += `  <select class="simple-video-transition-select" data-scene-index="${i}" ${isFirst ? 'disabled title="' + (isJa ? '最初のシーンは常にnone' : 'First scene is always none') + '"' : ''}>`;
+        for (const tt of _TRANSITION_TYPES_ALL) {
+            const tm = _TRANSITION_TYPE_META[tt];
+            const optLabel = isJa ? tm.label : tm.labelEn;
+            const selected = (tt === t) ? ' selected' : '';
+            html += `<option value="${tt}"${selected}>${optLabel}</option>`;
+        }
+        html += `  </select>`;
+        html += `  <span class="simple-video-transition-prompt-snippet" title="${escapeHtml(scenePrompts[i] || '')}">${escapeHtml(promptSnippet)}</span>`;
+        html += `</div>`;
+    }
+    html += `</div>`;
+    html += `</div>`; // close .simple-video-transition-body
+    container.innerHTML = html;
+
+    // Bind accordion toggle
+    const accordionBtn = container.querySelector('#simpleVideoTransitionAccordionBtn');
+    const body = container.querySelector('.simple-video-transition-body');
+    if (accordionBtn && body) {
+        accordionBtn.addEventListener('click', () => {
+            const nowOpen = body.style.display !== 'none';
+            body.style.display = nowOpen ? 'none' : '';
+            container.dataset.accordionOpen = nowOpen ? '0' : '1';
+            const arrow = accordionBtn.querySelector('.simple-video-transition-accordion-arrow');
+            if (arrow) arrow.textContent = nowOpen ? '▶' : '▼';
+        });
+    }
+
+    // Bind change events on dropdowns
+    container.querySelectorAll('.simple-video-transition-select').forEach(sel => {
+        sel.addEventListener('change', (e) => {
+            const idx = Number(e.target.dataset.sceneIndex);
+            const newType = String(e.target.value || 'none');
+            if (!Array.isArray(SimpleVideoUI.state.sceneTransitions)) return;
+            // Don't allow changing scene 0 from 'none'
+            if (idx === 0) {
+                e.target.value = 'none';
+                return;
+            }
+            SimpleVideoUI.state.sceneTransitions[idx] = newType;
+            saveSimpleVideoState();
+            // Update the badge next to the dropdown
+            const row = e.target.closest('.simple-video-transition-row');
+            const badge = row?.querySelector('.simple-video-transition-badge');
+            if (badge) {
+                const meta = _TRANSITION_TYPE_META[newType] || _TRANSITION_TYPE_META.none;
+                const isJa = normalizeSimpleVideoUiLanguage(SimpleVideoUI.state.uiLanguage) === 'ja';
+                badge.textContent = isJa ? meta.label : meta.labelEn;
+                badge.className = `simple-video-transition-badge ${meta.cls}`;
+            }
+            console.log(`[SimpleVideo] Transition #${idx + 1} changed to: ${newType}`);
+        });
+    });
 }
 
 async function translateSimpleVideoImagePrompt() {
@@ -11603,6 +12060,18 @@ function prependNoCharacterCloneGuard(promptText) {
         'If this cannot be satisfied, reduce background people rather than duplicating the referenced character.',
     ].join('\n');
     if (/never duplicate, clone, mirror, twin, or create another person with the same identity/i.test(body)) return body;
+    return `${guard}\n${body}`;
+}
+
+function prependSingleSceneGuard(promptText) {
+    const body = String(promptText || '').trim();
+    if (!body) return body;
+    const guard = [
+        'Single cohesive scene image (highest priority): output must be exactly one undivided image showing a single scene.',
+        'Do NOT output multiple panels, grid layouts, comic strips, character sheets, tiled frames, split views, or any divided compositions.',
+        'The entire canvas must show one continuous scene with no internal borders, dividers, or panel separators.',
+    ].join('\n');
+    if (/single cohesive scene image/i.test(body)) return body;
     return `${guard}\n${body}`;
 }
 
@@ -12235,6 +12704,61 @@ function setSceneVideoBasenameAtIndex({ presetId, index, basename }) {
     saveSimpleVideoState();
 }
 
+/**
+ * Build xfade parameters for video_concat requests.
+ * Returns an object to spread into the request body.
+ */
+function getXfadeConcatParams() {
+    const { state } = SimpleVideoUI;
+    if (!state.xfadeEnabled) return {};
+    return {
+        xfade_transition: String(state.xfadeType || 'fade'),
+        xfade_duration: Number(state.xfadeDuration) || 0.5,
+    };
+}
+
+/**
+ * Build per-boundary xfade parameters from sceneTransitions (mixed pipeline).
+ * Maps transition types to ffmpeg xfade effect names.
+ * Falls back to getXfadeConcatParams() when sceneTransitions is not available.
+ */
+function getPerBoundaryXfadeParams() {
+    const { state } = SimpleVideoUI;
+    const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : null;
+    if (!transitions || transitions.length < 2) return getXfadeConcatParams();
+
+    const preset = VIDEO_PRESETS.find(p => p.id === state.selectedPreset);
+    if (!preset?.mixedTransitions) return getXfadeConcatParams();
+
+    // Map transition types to ffmpeg xfade effect names
+    // transitions[i] describes how scene i transitions FROM the previous scene
+    // boundary[j] = transition between scene j and scene j+1 = transitions[j+1]
+    const xfadeMap = {
+        'crossfade': 'dissolve',
+        'fade_black': 'fadeblack',
+        'cut': '',       // empty = no xfade (hard cut)
+        'none': '',      // empty = no xfade
+        'flf': '',       // FLF already produces smooth transition, no xfade needed
+    };
+    const xfade_transitions = [];
+    for (let i = 1; i < transitions.length; i++) {
+        const t = String(transitions[i] || '').toLowerCase();
+        xfade_transitions.push(xfadeMap[t] !== undefined ? xfadeMap[t] : '');
+    }
+
+    // If all boundaries are empty (no xfade needed), check manual xfade override
+    const hasAnyXfade = xfade_transitions.some(t => !!t);
+    if (!hasAnyXfade) {
+        // Fall back to manual xfade settings if user enabled them
+        return getXfadeConcatParams();
+    }
+
+    return {
+        xfade_transitions,
+        xfade_duration: Number(state.xfadeDuration) || 0.5,
+    };
+}
+
 async function runSceneVideosConcatFromState({ presetId, title = '結合結果（再生成）' } = {}) {
     const pid = String(presetId || '').trim();
     const stateVideos = normalizeSceneVideos(SimpleVideoUI.state.sceneVideos);
@@ -12268,6 +12792,7 @@ async function runSceneVideosConcatFromState({ presetId, title = '結合結果�
         videos,
         fps: concatFps,
         keep_audio: !!SimpleVideoUI.state.generateAudio,
+        ...getPerBoundaryXfadeParams(),
     });
     const concatJobId = concatJob?.job_id;
     if (!concatJobId) throw new Error('結合ジョブ(job_id)が取得できません');
@@ -12330,8 +12855,8 @@ async function startGeneration() {
         return;
     }
     const desiredCount = Math.max(1, Number(state.sceneCount) || 1);
-    // FLF-only presets need N+1 images for N FLF segments
-    const effectiveDesiredCount = (preset?.flfOnly) ? desiredCount + 1 : desiredCount;
+    // FLF-only and mixed-transition presets need N+1 images for N FLF segments
+    const effectiveDesiredCount = (preset?.flfOnly || preset?.mixedTransitions) ? desiredCount + 1 : desiredCount;
     const hasIntermediate = hasCompleteIntermediateImagesForPreset({ presetId: preset.id, desiredCount: effectiveDesiredCount });
     if (preset.requiresImage && !state.uploadedImage && !preparedImageFilename && !hasIntermediate) {
         if (typeof showToast === 'function') showToast('画像（キー画像）をアップロードするか、初期フレームを生成してください', 'warning');
@@ -12359,7 +12884,7 @@ async function startGeneration() {
         const storedCount = Array.isArray(currentIntermediateImages.images) ? currentIntermediateImages.images.length : 0;
         const currentPresetId = String(preset.id || '');
         let currentDesiredCount = Math.max(1, Number(state.sceneCount) || 1);
-        if (preset?.flfOnly) currentDesiredCount += 1; // FLF-only needs N+1 images
+        if (preset?.flfOnly || preset?.mixedTransitions) currentDesiredCount += 1; // FLF-only / mixed needs N+1 images
         
         // Clear intermediate images if preset ID or scene count changed
         if (storedPresetId !== currentPresetId || storedCount !== currentDesiredCount) {
@@ -12497,6 +13022,7 @@ async function startGeneration() {
 
                 params.prompt = scenePrompt;
                 params.prompt = prependNoCharacterCloneGuard(params.prompt);
+                params.prompt = prependSingleSceneGuard(params.prompt);
                 params.input_image = referenceImageFilename;
 
                 // ref3: add as input_image_2 and inject prompt hint
@@ -12648,7 +13174,8 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio
+                    keep_audio: !!state.generateAudio,
+                    ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
                 if (!concatJobId) throw new Error('結合ジョブ(job_id)が取得できません');
@@ -12795,6 +13322,7 @@ async function startGeneration() {
 
                 params.prompt = scenePrompt;
                 params.prompt = prependNoCharacterCloneGuard(params.prompt);
+                params.prompt = prependSingleSceneGuard(params.prompt);
                 params.input_image = refForThisScene;
 
                 // ref3: add as input_image_2 and inject prompt hint
@@ -12956,7 +13484,8 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio
+                    keep_audio: !!state.generateAudio,
+                    ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
                 if (!concatJobId) throw new Error('結合ジョブ(job_id)が取得できません');
@@ -13100,6 +13629,7 @@ async function startGeneration() {
 
                 params.prompt = scenePrompt;
                 params.prompt = prependNoCharacterCloneGuard(params.prompt);
+                params.prompt = prependSingleSceneGuard(params.prompt);
                 params.input_image = refForThisScene;
 
                 // ref3: add as input_image_2 and inject prompt hint
@@ -13257,7 +13787,8 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio
+                    keep_audio: !!state.generateAudio,
+                    ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
                 if (!concatJobId) throw new Error('結合ジョブ(job_id)が取得できません');
@@ -13304,6 +13835,369 @@ async function startGeneration() {
 
             setSimpleVideoProgress('完了', 1);
             if (typeof showToast === 'function') showToast(`生成が完了しました（${sceneCount}シーン・シーンカット形式）`, 'success');
+            return;
+        }
+
+        // ================================================================
+        // Special pipeline: Character video with EDIT composite + MIXED transitions (FLF/I2V/cut/fade)
+        // Also handles ext_i2i_i2v_mixed (key-image reference variant, no character image required)
+        // ================================================================
+        if (preset.id === 'char_edit_i2v_mixed' || preset.id === 'ext_i2i_i2v_mixed') {
+            syncFpsForCurrentOptions({ forceUI: true });
+
+            const sceneCount = scenePrompts.length; // N+1 (mixedTransitions adds +1)
+            // ext_i2i_i2v_mixed uses reference-based I2I (2512) by default; char_edit_i2v_mixed uses instruction-based EDIT (2511)
+            const i2iDefaultWorkflow = (preset.id === 'ext_i2i_i2v_mixed') ? 'qwen_i2i_2512_lightning4' : 'qwen_i2i_2511_bf16_lightning4';
+            const i2iWorkflowBase = (String(state.i2iRefineWorkflow || '') !== 'auto' && String(state.i2iRefineWorkflow || '').trim())
+                ? normalizeWorkflowAlias(String(state.i2iRefineWorkflow))
+                : normalizeWorkflowAlias(getConfiguredSimpleVideoWorkflow('i2i', i2iDefaultWorkflow));
+
+            const { ref3Active, ref3Mode, adjustedWorkflow: i2iWorkflowFromRef3c } = computeRef3SceneI2IConfig(i2iWorkflowBase);
+            let i2iWorkflow = i2iWorkflowFromRef3c;
+            if (state.useCharSheetAsRef && !!state.characterSheetImage?.filename) {
+                i2iWorkflow = normalizeWorkflowAlias(state.charSheetRefWorkflow || 'qwen_i2i_2511_bf16_lightning4');
+            }
+
+            // I2V and FLF workflows
+            const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
+            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+
+            // Transition array from LLM (index 0 = first scene, always 'none')
+            const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
+
+            const desiredMidCount = Math.max(1, sceneCount);
+            const scenarioFP = computeScenarioFingerprint(state.scenario, scenePrompts);
+            const inter = ensureIntermediateImagesState({ presetId: preset.id, desiredCount: desiredMidCount, scenarioFingerprint: scenarioFP });
+            if (!inter) throw new Error('中間画像の状態が初期化できません');
+
+            renderSimpleVideoIntermediateImagesUI();
+
+            const missingCount = (Array.isArray(inter.images) ? inter.images : [])
+                .slice(0, sceneCount)
+                .filter((v) => !v || !String(v.filename || '').trim()).length;
+
+            const fallbackRef = resolveSceneReferenceImageForRun(state, { preferCharacter: false });
+            const fallbackRefImage = String(fallbackRef.filename || '').trim();
+            if (missingCount > 0 && !state.characterImage?.filename && !state.characterSheetImage?.filename && !fallbackRefImage) {
+                const refErrMsg = (preset.id === 'ext_i2i_i2v_mixed')
+                    ? '参照画像がありません（🖼️キー画像をアップロードしてください）'
+                    : '参照画像がありません（キャラ画像・キャラクターシート・キー画像・ref1 のいずれかを用意してください）';
+                throw new Error(refErrMsg);
+            }
+            if (missingCount > 0 && !state.characterImage?.filename && fallbackRef.source === 'keyImage') {
+                console.log(`[SimpleVideo] ${preset.id}: 内部参照画像なしのためキー画像を参照に使用`);
+            }
+
+            // Count how many boundaries use each type for step estimation
+            const numBoundaries = Math.max(0, sceneCount - 1);
+            const imageJobsToRun = Math.max(0, missingCount);
+            const videoJobsToRun = numBoundaries;
+            const totalSteps = Math.max(1, imageJobsToRun + videoJobsToRun + 1);
+            state.totalSteps = totalSteps;
+            saveSimpleVideoState();
+
+            const sceneVideoBasenames = [];
+            const sceneImages = [];
+            let stepCursor = 0;
+
+            const useSheetAsRef3 = state.useCharSheetAsRef && !!state.characterSheetImage?.filename;
+            const characterImageFilename = useSheetAsRef3
+                ? state.characterSheetImage.filename
+                : (state.characterImage?.filename || fallbackRefImage || null);
+            const refSource = normalizeI2IRefSource(state.i2iRefSource);
+            let firstSceneImageFilename = null;
+
+            setSimpleVideoRefSourceInfo(buildRefSourceInfoHTML(state));
+
+            // (A) Generate per-scene still images via I2I (N+1 images for mixed)
+            for (let sceneIndex = 0; sceneIndex < sceneCount; sceneIndex++) {
+                if ((Number(state.cancelSeq) || 0) !== cancelSeqAtStart) throw new Error('Cancelled');
+
+                const scenePrompt = String(scenePrompts[sceneIndex] || '').trim();
+                if (!scenePrompt) continue;
+
+                const existing = inter.images?.[sceneIndex];
+                if (existing?.filename) {
+                    sceneImages.push(String(existing.filename));
+                    if (sceneIndex === 0) firstSceneImageFilename = String(existing.filename);
+                    continue;
+                }
+
+                state.currentStep = stepCursor + 1;
+                saveSimpleVideoState();
+
+                let refForThisScene = characterImageFilename;
+                if (sceneIndex >= 1 && refSource === 'first_scene' && firstSceneImageFilename) {
+                    refForThisScene = firstSceneImageFilename;
+                }
+
+                const params = {};
+                if (width && height) {
+                    params.width = width;
+                    params.height = height;
+                }
+
+                params.prompt = scenePrompt;
+                // Character clone guard is only relevant when a character reference image is used
+                if (preset.id !== 'ext_i2i_i2v_mixed') {
+                    params.prompt = prependNoCharacterCloneGuard(params.prompt);
+                }
+                // For reference-based I2I (2512), prevent the model from generating panel/split layouts
+                if (preset.id === 'ext_i2i_i2v_mixed') {
+                    params.prompt = prependSingleSceneGuard(params.prompt);
+                }
+                params.input_image = refForThisScene;
+
+                if (ref3Active && state.dropSlots?.[2]?.filename) {
+                    params.input_image_2 = state.dropSlots[2].filename;
+                    const hint = buildRef3PromptHint(ref3Mode, 2);
+                    if (hint) params.prompt = hint + '\n' + params.prompt;
+                }
+
+                if (useSheetAsRef3 && isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
+                    params.prompt = buildCharSheetRefPromptHint() + '\n' + params.prompt;
+                }
+
+                if (isQwen2511ImageEditWorkflowId(i2iWorkflow)) {
+                    params.prompt = wrapQwen2511EditInstructionPrompt(params.prompt);
+                }
+
+                // ext_i2i_i2v_mixed uses reference-based I2I (2512): use higher cfg for prompt adherence
+                const denoiseDefault = (preset.id === 'ext_i2i_i2v_mixed') ? '0.750' : '1.0';
+                const cfgDefault     = (preset.id === 'ext_i2i_i2v_mixed') ? '7.0'   : '1.0';
+                params.denoise = Number(normalizeDenoise(state.i2iDenoise, denoiseDefault));
+                params.cfg = Number(normalizeCfg(state.i2iCfg, cfgDefault));
+
+                const label = `S${sceneIndex + 1}/${sceneCount} シーン画像(I2I)`;
+                const res = await runWorkflowStep({
+                    workflow: i2iWorkflow,
+                    label,
+                    requestParams: params,
+                    stepIndex: stepCursor,
+                    totalSteps,
+                });
+                stepCursor++;
+
+                renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `シーン画像 #${sceneIndex + 1}`, preferMedia: 'image' });
+
+                const imgOut = pickBestOutput(res.outputs, 'image');
+                if (!imgOut?.filename) throw new Error(`シーン${sceneIndex + 1}のI2I出力画像が見つかりませんでした`);
+                const filename = String(imgOut.filename);
+                sceneImages.push(filename);
+
+                if (sceneIndex === 0) firstSceneImageFilename = filename;
+
+                inter.images[sceneIndex] = {
+                    source: 'generated',
+                    filename,
+                    jobId: String(res.jobId),
+                    prompt: String(params.prompt || ''),
+                    rawPrompt: scenePrompt,
+                    previewUrl: getSimpleVideoDownloadURL(res.jobId, filename),
+                };
+                saveSimpleVideoState();
+                renderSimpleVideoIntermediateImagesUI();
+            }
+
+            if (sceneImages.length < 2) throw new Error('混在パイプラインには最低2枚のシーン画像が必要です');
+
+            setSimpleVideoProgress(`✅ 全${sceneImages.length}シーン画像の準備ができました。CONTINUE で動画生成へ進みます`, stepCursor / Math.max(1, totalSteps));
+            if (typeof showToast === 'function') showToast('✅ 中間画像の準備ができました（CONTINUEで動画生成へ進みます）', 'success');
+
+            const continueAfterCheck = await confirmContinueAfterIntermediateImages({
+                preset,
+                generatedCount: imageJobsToRun,
+                totalCount: sceneCount,
+            });
+            if (!continueAfterCheck) return;
+
+            // Refresh sceneImages/scenePrompts from inter.images
+            {
+                const refreshed = Array.isArray(inter.images) ? inter.images : [];
+                for (let i = 0; i < sceneCount; i++) {
+                    const entry = refreshed[i];
+                    if (entry?.filename) {
+                        sceneImages[i] = String(entry.filename);
+                        const rp = String(entry.rawPrompt || entry.prompt || '').trim();
+                        if (rp) scenePrompts[i] = rp;
+                    }
+                }
+            }
+
+            // (B) Generate videos for each boundary — FLF or I2V depending on transition type
+            const fpsRaw = Number(state.fps);
+            const fallbackFps = getDefaultFpsForVideoWorkflow(i2vWorkflow);
+            const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
+            // Build a parallel array of prompts matched to sceneImages (for composeFLFPrompt)
+            const sceneImagePrompts = scenePrompts.slice(0, sceneImages.length);
+
+            for (let i = 0; i < sceneImages.length - 1; i++) {
+                if ((Number(state.cancelSeq) || 0) !== cancelSeqAtStart) throw new Error('Cancelled');
+
+                state.currentStep = stepCursor + 1;
+                saveSimpleVideoState();
+
+                // Transition type for boundary i→i+1 is stored at transitions[i+1]
+                const transType = String(transitions[i + 1] || '').toLowerCase();
+                const useFLF = (transType === 'flf');
+
+                if (useFLF) {
+                    // --- FLF path: first-last-frame interpolation ---
+                    const startImage = String(sceneImages[i]);
+                    const endImage = String(sceneImages[i + 1]);
+                    const basePrompt = String(sceneImagePrompts[i] || '').trim();
+                    const endPrompt = String(sceneImagePrompts[i + 1] || '').trim();
+                    const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
+
+                    const params = {
+                        prompt: flfPrompt,
+                        input_image_start: startImage,
+                        input_image_end: endImage,
+                    };
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
+                    params.fps = effectiveFps;
+                    const frames = getSceneFramesForIndex(i, effectiveFps);
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+
+                    const label = `S${i + 1}→S${i + 2}/${sceneCount} FLF遷移`;
+                    const res = await runWorkflowStep({
+                        workflow: flfWorkflow,
+                        label,
+                        requestParams: params,
+                        stepIndex: stepCursor,
+                        totalSteps,
+                    });
+                    stepCursor++;
+
+                    renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `FLF ${i + 1}→${i + 2}` });
+
+                    const vid = pickBestOutput(res.outputs, 'video');
+                    if (vid?.filename) {
+                        const base = String(vid.filename).split('/').pop();
+                        if (base) sceneVideoBasenames.push(base);
+                    } else {
+                        throw new Error(`FLF ${i + 1}→${i + 2} の出力動画が見つかりませんでした`);
+                    }
+                } else {
+                    // --- I2V path: image-to-video for scene i ---
+                    const sceneImage = String(sceneImages[i]);
+                    const scenePrompt = String(sceneImagePrompts[i] || '').trim();
+
+                    const params = {
+                        prompt: scenePrompt,
+                        input_image: sceneImage,
+                    };
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
+                    params.fps = effectiveFps;
+                    const frames = getSceneFramesForIndex(i, effectiveFps);
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+
+                    // LTX audio setting
+                    if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
+
+                    const label = `S${i + 1}/${sceneCount} シーン動画(I2V) [${transType || 'i2v'}]`;
+                    const res = await runWorkflowStep({
+                        workflow: i2vWorkflow,
+                        label,
+                        requestParams: params,
+                        stepIndex: stepCursor,
+                        totalSteps,
+                    });
+                    stepCursor++;
+
+                    renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `I2V #${i + 1} [${transType || 'i2v'}]` });
+
+                    const vid = pickBestOutput(res.outputs, 'video');
+                    if (vid?.filename) {
+                        const base = String(vid.filename).split('/').pop();
+                        if (base) sceneVideoBasenames.push(base);
+                    } else {
+                        throw new Error(`シーン${i + 1}のI2V出力動画が見つかりませんでした`);
+                    }
+                }
+            }
+
+            // (C) Concat stage
+            const concatStepIndex = Math.max(0, stepCursor);
+            state.currentStep = concatStepIndex + 1;
+            saveSimpleVideoState();
+
+            if ((Number(state.cancelSeq) || 0) !== cancelSeqAtStart) throw new Error('Cancelled');
+
+            const api = window.app?.api;
+            if (!api || typeof api.generateUtility !== 'function' || typeof api.monitorProgress !== 'function') {
+                throw new Error('APIが利用できません（app.api.generateUtility/monitorProgress）');
+            }
+
+            if (sceneVideoBasenames.length < 2) {
+                const overall = (concatStepIndex + 1) / Math.max(1, totalSteps);
+                setSimpleVideoProgress('✅ 結合スキップ（動画が2本未満）', overall);
+            } else {
+                rememberSceneVideoBasenames({ presetId: preset.id, sceneVideoBasenames });
+                const concatFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : 16;
+
+                if (typeof showToast === 'function') showToast(`🔗 動画を結合中...（${sceneVideoBasenames.length}本）`, 'info');
+
+                const concatJob = await api.generateUtility({
+                    workflow: 'video_concat',
+                    videos: sceneVideoBasenames,
+                    fps: concatFps,
+                    keep_audio: !!state.generateAudio,
+                    ...getPerBoundaryXfadeParams(),
+                });
+                const concatJobId = concatJob?.job_id;
+                if (!concatJobId) throw new Error('結合ジョブ(job_id)が取得できません');
+
+                state.activeJobId = String(concatJobId);
+                saveSimpleVideoState();
+                updateGenerateButtonState();
+
+                await new Promise((resolve, reject) => {
+                    let done = false;
+                    const finish = (fn) => (arg) => {
+                        if (done) return;
+                        done = true;
+                        fn(arg);
+                    };
+
+                    api.monitorProgress(
+                        concatJobId,
+                        (p) => {
+                            if ((Number(state.cancelSeq) || 0) !== cancelSeqAtStart) {
+                                try { api.closeWebSocket?.(concatJobId); } catch (_e) {}
+                                finish(reject)(new Error('Cancelled'));
+                                return;
+                            }
+                            const local01 = normalizeProgress01(p?.progress);
+                            const overall = (concatStepIndex + local01) / Math.max(1, totalSteps);
+                            setSimpleVideoProgress(`🔗 結合: ${p?.message || 'Processing...'}`, overall);
+                        },
+                        finish(() => resolve()),
+                        finish((err) => reject(err))
+                    );
+                });
+
+                if (String(state.activeJobId || '') === String(concatJobId)) {
+                    state.activeJobId = null;
+                    saveSimpleVideoState();
+                    updateGenerateButtonState();
+                }
+
+                const outputsPayload = (typeof api.getOutputs === 'function') ? await api.getOutputs(concatJobId) : null;
+                const outputs = Array.isArray(outputsPayload?.outputs) ? outputsPayload.outputs : [];
+                renderSimpleVideoOutputMedia({ jobId: concatJobId, outputs, title: `結合結果（${sceneVideoBasenames.length}本）`, showMusicMergeButton: true });
+            }
+
+            setSimpleVideoProgress('完了', 1);
+            if (typeof showToast === 'function') showToast(`生成が完了しました（${sceneCount}シーン・混在トランジション）`, 'success');
             return;
         }
 
@@ -13725,7 +14619,8 @@ async function startGeneration() {
                 workflow: 'video_concat',
                 videos: sceneVideoBasenames,
                 fps: concatFps,
-                keep_audio: !!state.generateAudio
+                keep_audio: !!state.generateAudio,
+                ...getPerBoundaryXfadeParams(),
             });
             const concatJobId = concatJob?.job_id;
             if (!concatJobId) throw new Error('結合ジョブ(job_id)が取得できません');

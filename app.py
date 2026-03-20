@@ -253,6 +253,9 @@ class UtilityRequest(BaseModel):
     audio: Optional[str] = None
     fps: Optional[int] = 16
     keep_audio: Optional[bool] = None
+    xfade_transition: Optional[str] = None   # e.g. 'fade', 'dissolve', 'wipeleft', etc.
+    xfade_duration: Optional[float] = None   # transition duration in seconds (default 0.5)
+    xfade_transitions: Optional[List[str]] = None  # per-boundary xfade types, e.g. ['none','dissolve','fadeblack','none']
     user_prompt: Optional[str] = None
     scene_count: Optional[int] = None
     output_type: Optional[str] = None
@@ -1243,6 +1246,21 @@ def _clean_prompt_line(s: str) -> str:
     return s.strip()
 
 
+# Regex to extract [transition=TYPE] inline tags from prompt text
+_TRANSITION_TAG_RE = re.compile(r"\[transition\s*=\s*(\w+)\]\s*", re.IGNORECASE)
+_VALID_TRANSITIONS = {"flf", "cut", "crossfade", "fade_black", "none"}
+
+
+def _extract_transition_tag(text: str) -> tuple[str, Optional[str]]:
+    """Strip [transition=TYPE] tag from text, return (clean_text, transition_or_None)."""
+    m = _TRANSITION_TAG_RE.search(text)
+    if not m:
+        return text, None
+    tag_value = m.group(1).lower()
+    clean = text[:m.start()] + text[m.end():]
+    return clean.strip(), tag_value if tag_value in _VALID_TRANSITIONS else None
+
+
 def _parse_numbered_prompts(text: str, desired_count: Optional[int] = None) -> list[Dict[str, Any]]:
     # Pre-process: insert newline before any inline #N: markers so they are on their own line
     text = re.sub(r"\s+(#\d+\s*[:.)\uff1a])", r"\n\1", str(text or ""))
@@ -1262,6 +1280,14 @@ def _parse_numbered_prompts(text: str, desired_count: Optional[int] = None) -> l
                 current_text = f"{current_text} {cleaned}".strip()
     if current_num is not None and current_text.strip():
         prompts.append({"scene": current_num, "prompt": current_text.strip()})
+
+    # Extract [transition=TYPE] tags from prompt text (Phase 2 support)
+    for entry in prompts:
+        clean_text, transition = _extract_transition_tag(entry["prompt"])
+        entry["prompt"] = clean_text
+        if transition:
+            entry["transition"] = transition
+
     if not prompts:
         raw = str(text or "").strip()
         if raw:
@@ -1482,6 +1508,9 @@ def _fallback_prompt_generate(
             variation_suffix = "Keep continuity while allowing natural scene progression."
 
     target = (output_type or "video").strip().lower()
+    # Treat mixed_sequence like flf_sequence for fallback prompt generation
+    if target == "mixed_sequence":
+        target = "flf_sequence"
     base = pad_to_count(source_units, count)
     prompts: list[Dict[str, Any]] = []
     for idx in range(count):
@@ -2065,31 +2094,158 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         await job_manager.update(job, progress=0.15, message=f"Resolving {len(videos)} videos")
         video_paths = [await asyncio.to_thread(_resolve_media_path, item, "video") for item in videos]
         OUTPUT_DIR.joinpath("video").mkdir(parents=True, exist_ok=True)
-        list_path = OUTPUT_DIR / "video" / f"concat_{job.job_id}.txt"
-        content = "".join([f"file '{p.as_posix()}'\n" for p in video_paths])
-        list_path.write_text(content, encoding="utf-8")
 
         fps = int(req.fps or 16)
         out_name = f"concat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
         out_path = OUTPUT_DIR / "video" / out_name
-        await job_manager.update(job, progress=0.45, message="Running ffmpeg concat")
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", str(list_path),
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-            "-r", str(max(1, fps)),
-            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-        ]
-        if req.keep_audio is False:
-            cmd += ["-an"]
-        else:
-            cmd += ["-c:a", "aac", "-b:a", "128k"]
-        cmd.append(str(out_path))
-        try:
+
+        xfade_type = (req.xfade_transition or "").strip().lower()
+        xfade_dur = float(req.xfade_duration or 0.5)
+        VALID_XFADE = {"fade", "dissolve", "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "circlecrop", "rectcrop", "distance", "fadeblack", "fadewhite", "radial", "smoothleft", "smoothright", "smoothup", "smoothdown"}
+
+        # Per-boundary xfade types: list of transition types for each boundary (N-1 entries for N videos)
+        per_boundary = req.xfade_transitions if isinstance(req.xfade_transitions, list) else None
+        has_per_boundary = per_boundary and len(per_boundary) >= 1 and any(
+            (t or "").strip().lower() in VALID_XFADE for t in per_boundary
+        )
+        # Decide if we need xfade filter_complex
+        use_xfade = len(video_paths) >= 2 and (
+            has_per_boundary
+            or (xfade_type and xfade_type in VALID_XFADE)
+        )
+
+        print(f"[video_concat] videos={len(videos)}, xfade_type={xfade_type!r}, per_boundary={per_boundary}, has_per_boundary={has_per_boundary}, use_xfade={use_xfade}")
+
+        if use_xfade:
+            # --- xfade mode: use filter_complex to apply transitions ---
+            await job_manager.update(job, progress=0.30, message=f"Probing {len(video_paths)} videos")
+
+            def _probe_duration(path: Path) -> float:
+                """Get video duration in seconds via ffprobe."""
+                result = subprocess.run(
+                    ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                     "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                    capture_output=True, text=True
+                )
+                try:
+                    return float(result.stdout.strip())
+                except (ValueError, AttributeError):
+                    return 5.0  # fallback
+
+            durations = [await asyncio.to_thread(_probe_duration, p) for p in video_paths]
+            # Clamp xfade_dur so it doesn't exceed any clip length
+            min_dur = min(durations) if durations else 5.0
+            xfade_dur = min(xfade_dur, min_dur * 0.8)  # at most 80% of shortest clip
+            xfade_dur = max(0.1, xfade_dur)
+
+            # Resolve per-boundary transition types
+            n = len(video_paths)
+            boundary_types: list[str] = []
+            if has_per_boundary and per_boundary:
+                for idx in range(n - 1):
+                    raw = (per_boundary[idx] if idx < len(per_boundary) else "").strip().lower()
+                    boundary_types.append(raw if raw in VALID_XFADE else "")
+            else:
+                boundary_types = [xfade_type] * (n - 1)
+
+            xfade_label = ", ".join(set(t for t in boundary_types if t) or {xfade_type or "xfade"})
+            await job_manager.update(job, progress=0.45, message=f"Running ffmpeg xfade ({xfade_label}, {xfade_dur:.1f}s)")
+
+            inputs = []
+            for p in video_paths:
+                inputs += ["-i", str(p)]
+
+            # Build xfade filter chain: apply xfade between consecutive pairs
+            # For boundaries with no xfade type (empty/"none"), use a 1-frame xfade as hard cut.
+            # NOTE: duration=0.001 causes ffmpeg to drop frames due to timestamp rounding issues.
+            #       Using 1/fps (one frame) produces a visually imperceptible cut and correct output.
+            min_xfade_dur = round(1.0 / max(1, fps), 4)  # 1 frame duration for hard cuts
+            filter_parts = []
+            cumulative = durations[0]
+            prev_label = "[0:v]"
+            for i in range(1, n):
+                bt = boundary_types[i - 1] if (i - 1) < len(boundary_types) else ""
+                out_label = f"[v{i}]" if i < n - 1 else "[vout]"
+                if bt and bt in VALID_XFADE:
+                    offset = max(0, cumulative - xfade_dur)
+                    filter_parts.append(
+                        f"{prev_label}[{i}:v]xfade=transition={bt}:duration={xfade_dur:.3f}:offset={offset:.3f}{out_label}"
+                    )
+                    cumulative = offset + durations[i]
+                else:
+                    # Hard cut: use 1-frame xfade (visually identical to a cut)
+                    offset = max(0, cumulative - min_xfade_dur)
+                    filter_parts.append(
+                        f"{prev_label}[{i}:v]xfade=transition=fade:duration={min_xfade_dur:.4f}:offset={offset:.4f}{out_label}"
+                    )
+                    cumulative = offset + durations[i]
+                prev_label = out_label
+
+            # Audio: concat all audio streams (if available and not disabled)
+            audio_filter = ""
+            audio_map = []
+            if req.keep_audio is not False:
+                # Check if any input has audio; if not, skip audio concat to avoid ffmpeg errors
+                def _has_audio(path: Path) -> bool:
+                    result = subprocess.run(
+                        ["ffprobe", "-v", "error", "-select_streams", "a",
+                         "-show_entries", "stream=codec_type",
+                         "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                        capture_output=True, text=True
+                    )
+                    return "audio" in (result.stdout or "")
+                has_any_audio = any(await asyncio.to_thread(_has_audio, p) for p in video_paths)
+                if has_any_audio:
+                    a_inputs = "".join(f"[{i}:a]" for i in range(n))
+                    audio_filter = f";{a_inputs}concat=n={n}:v=0:a=1[aout]"
+                    audio_map = ["-map", "[aout]"]
+
+            filter_complex = ";".join(filter_parts) + audio_filter if audio_filter else ";".join(filter_parts)
+
+            print(f"[video_concat] filter_complex={filter_complex}")
+            print(f"[video_concat] boundary_types={boundary_types}, durations={durations}")
+
+            cmd = [
+                "ffmpeg", "-y",
+                *inputs,
+                "-filter_complex", filter_complex,
+                "-map", "[vout]",
+                *audio_map,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-r", str(max(1, fps)),
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            ]
+            if req.keep_audio is False:
+                cmd += ["-an"]
+            elif audio_map:
+                cmd += ["-c:a", "aac", "-b:a", "128k"]
+            cmd.append(str(out_path))
             await asyncio.to_thread(_run_ffmpeg, cmd)
-        finally:
-            list_path.unlink(missing_ok=True)
+        else:
+            # --- Standard concat mode (no xfade) ---
+            list_path = OUTPUT_DIR / "video" / f"concat_{job.job_id}.txt"
+            content = "".join([f"file '{p.as_posix()}'\n" for p in video_paths])
+            list_path.write_text(content, encoding="utf-8")
+
+            await job_manager.update(job, progress=0.45, message="Running ffmpeg concat")
+            cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", str(list_path),
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-r", str(max(1, fps)),
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            ]
+            if req.keep_audio is False:
+                cmd += ["-an"]
+            else:
+                cmd += ["-c:a", "aac", "-b:a", "128k"]
+            cmd.append(str(out_path))
+            try:
+                await asyncio.to_thread(_run_ffmpeg, cmd)
+            finally:
+                list_path.unlink(missing_ok=True)
+
         return {"outputs": [_build_output_item(out_name, "video", "video")]}
 
     if workflow == "video_audio_merge":
@@ -2199,8 +2355,32 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         else:
             if output_type == "flf_sequence":
                 system_role = (
-                    "You are a prompt engineer for FLF keyframe sequences. "
-                    "Output exactly N prompts with #N:. Keep strict continuity across scenes."
+                    "You are a prompt engineer for FLF keyframe sequences with scene transition control. "
+                    "Output exactly N prompts with #N:. Keep strict continuity across scenes. "
+                    "For each scene, specify the recommended transition type from the PREVIOUS scene "
+                    "using an inline tag at the start: [transition=TYPE]. "
+                    "Valid transition types: "
+                    "flf = smooth First-Last-Frame transition (use for continuous action, same location), "
+                    "cut = hard cut (use for dramatic scene change, time skip, location change), "
+                    "crossfade = gradual blend (use for mood shift, dream sequence), "
+                    "fade_black = fade through black (use for time passage, act break). "
+                    "Scene #1 always uses [transition=none] (it is the first scene)."
+                )
+            elif output_type == "mixed_sequence":
+                system_role = (
+                    "You are an expert video editor choosing transition types between scenes. "
+                    "Output exactly N prompts with #N:. "
+                    "CRITICAL: You MUST choose DIVERSE transition types based on scene relationships. "
+                    "Do NOT default to all-flf. Analyze the narrative context between each pair of adjacent scenes. "
+                    "For each scene, add [transition=TYPE] at the start of the line. "
+                    "Rules for choosing transitions: "
+                    "- flf: ONLY when scenes share the same location AND continuous action (e.g. character continues walking in same room). "
+                    "- cut: When there is a clear scene change, different location, or time skip. This is the most common transition in real films. "
+                    "- crossfade: For mood shifts, flashback/dream sequences, or emotional transitions. "
+                    "- fade_black: For major time passage, act breaks, or dramatic pauses. "
+                    "- none: Only for scene #1. "
+                    "A typical 5-scene video should have 2-3 different transition types. "
+                    "Scene #1 always uses [transition=none]."
                 )
             elif output_type == "video_frame":
                 system_role = (
@@ -2258,7 +2438,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             )
 
             motion_hint = ""
-            if output_type == "flf_sequence":
+            if output_type in {"flf_sequence", "mixed_sequence"}:
                 if motion_level in {"tiny", "micro", "xs"}:
                     motion_hint = "Use tiny frame-to-frame changes with near-static progression."
                 elif motion_level in {"small", "low", "s"}:
@@ -2278,10 +2458,10 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 f"Create exactly {scene_count} prompts for output_type={output_type}.\n"
                 f"User request:\n{req.user_prompt}\n\n"
                 f"Complexity: {complexity}. {complexity_rules[complexity]}\n"
-                f"Guidance: {(video_structure_hint if output_type in {'video', 'flf_sequence'} else image_structure_hint)}\n"
+                f"Guidance: {(video_structure_hint if output_type in {'video', 'flf_sequence', 'mixed_sequence'} else image_structure_hint)}\n"
                 f"Variation preference: {variation_hint}\n"
                 f"{motion_hint}\n"
-                "Output format: #1: <text>, #2: <text>, ... "
+                "Output format: #1: [transition=none] <text>, #2: [transition=TYPE] <text>, ... "
                 "Plain text only. No markdown, no bold, no headers, no explanations. "
                 "Each prompt on one line starting with #N:."
             )

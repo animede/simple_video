@@ -186,6 +186,14 @@ Available presets:
 | Character I2I + FLF Continuous | I2I scene images from character refs + FLF transitions |
 | Character EDIT + I2I + FLF Continuous | EDIT -> I2I -> FLF transitions |
 | Character EDIT + I2I + I2V Scene Cut | EDIT -> I2I -> I2V per scene |
+| Character EDIT + I2I + Mixed Transitions | EDIT -> I2I (N+1 images) -> FLF or I2V per boundary, auto-selected |
+| Key Image Ref I2I + Mixed Transitions | I2I from key image ref (N+1 images) -> FLF or I2V per boundary (no character needed) |
+
+For mixed transition presets (`Character EDIT + I2I + Mixed Transitions` / `Key Image Ref I2I + Mixed Transitions`):
+
+- **🤖 Prompt Generation** auto-determines N+1 scene prompts + per-boundary transition type (FLF / I2V / cut / fade)
+- **🖼️ Pre-generate Scene Images** generates N+1 still images first → CONTINUE confirmation → proceed to video generation
+- `Key Image Ref I2I + Mixed Transitions` requires only a 🖼️ key image (no character image needed)
 
 ### 7.2 ⚙️ Video Settings
 
@@ -322,6 +330,26 @@ Notes:
 
 - View and edit LLM-generated scene prompts
 - `🌐 Translate`: EN<->JA
+
+#### 🔀 Scene Transition Types (mixed transition presets only)
+
+Displayed as a collapsible accordion below the prompts textarea after prompt generation on mixed transition presets.
+
+**Contents:**
+- Header: per-type count badges (e.g. `FLF ×3` `Cut ×2`)
+- Each row: scene number / colored badge / dropdown / first 40 chars of prompt
+
+**Transition types:**
+
+| Type | Description |
+|---|---|
+| `―` (none) | No transition (scene 1 is always this) |
+| `FLF` | First-Last-Frame interpolation — smooth morph between adjacent images |
+| `Cut` | Hard cut (direct scene switch) |
+| `Crossfade` | Video-level crossfade blend |
+| `Fade Black` | Fade to black then fade in |
+
+**Manual override:** Change any row's dropdown to update immediately (saved to state, applied on next generation). Scene 1 is always `―` (not editable).
 
 ### 7.9 🧩 Prompt Writing Tips (Higher Quality)
 
