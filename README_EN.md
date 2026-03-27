@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v0.95.0
+Version: v0.95.1
 
 License: [MIT](./LICENSE)
 
@@ -10,12 +10,13 @@ Language: [日本語](./README.md) | English
 
 This document is focused on practical information for public repository users: setup, run, usage, and limits.
 
-## Why v94.0
+## Why v0.95.1
 
 - **All-in-one flow**: image (T2I/I2I) -> video (T2V/I2V/FLF) -> music (T2A) -> merge (M2V/V2M)
 - **Faster prompt workflow**: 2-step flow (`🧠 Build Scenario` -> `🤖 Generate Prompts`)
 - **More stable style continuity**: style presets + post-generation style-consistency guardrails
 - **ACE-Step API integration**: Thinking mode (high-quality generation) and AI Tag enhancement
+- **Server mode**: Multi-user support with session isolation
 
 ## Quick Start (3 Steps)
 
@@ -74,14 +75,13 @@ Because all of this is available in one UI, you can produce image/video/music/mo
 
 ## Scope
 
-- Single-user only
+- Single-user (default) or multi-user (server mode)
 - Local ComfyUI only (default `127.0.0.1:8188`)
 - Only APIs required for Simple Video are implemented
 
 ### Not Supported
 
 - Distributed mode
-- Multi-user concurrent operation
 - Utility features for the full/main product (not in standalone)
 
 ## Requirements
@@ -476,6 +476,53 @@ ACE_STEP_API_URL=http://127.0.0.1:8001 ./start.sh
 - Thinking mode may take several minutes per generation
 - AI Tag enhancement requires LM on the ACE-Step API server side
 
+## Server Mode (Multi-User)
+
+You can start the app in server mode to allow multiple users to access it simultaneously.
+Each session gets its own isolated data (state, images, video, audio), preventing interference between users.
+
+### How to Start
+
+```bash
+# Start in server mode (supports same options as start.sh)
+bash start_server.sh
+
+# Specify host and port
+bash start_server.sh --host 0.0.0.0 --port 8090
+
+# Combine with other options
+bash start_server.sh --comfyui-server 192.168.1.100:8188 --ace-step-url http://127.0.0.1:8001
+```
+
+Or set the environment variable manually:
+
+```bash
+SIMPLE_VIDEO_MULTI_USER=1 uvicorn app_server:app --host 0.0.0.0 --port 8090
+```
+
+### How It Works
+
+| Item | Description |
+|---|---|
+| Session ID | UUID auto-generated per browser (localStorage + Cookie) |
+| Data isolation | State and reference images saved under `data/sessions/{session_id}/` |
+| Output isolation | Files in `output/{image,video,movie,audio}/` separated by session ID |
+| Temp isolation | Temp files under `temp/{session_id}/` |
+
+### Differences from start.sh
+
+| | `start.sh` | `start_server.sh` |
+|---|---|---|
+| Default host | `127.0.0.1` | `0.0.0.0` |
+| Default reload | `--reload` | off |
+| Session isolation | off | on (`MULTI_USER=1`) |
+| Module | `app:app` | `app_server:app` |
+
+### Notes
+
+- ComfyUI is shared across all users, so heavy concurrent job submission may cause queuing
+- Session data persists in `data/sessions/` after server restart (manage by manual deletion)
+
 ## Quick Check
 
 ```bash
@@ -494,7 +541,9 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 ## Key Files
 
 - `app.py`: FastAPI server (static + API)
+- `app_server.py`: Multi-user mode entry point
 - `start.sh`: standalone startup script
+- `start_server.sh`: multi-user mode startup script
 - `static/index.html`: Simple Video screen
 - `static/js/bootstrap.js`: bootstrap + Help panel control
 - `static/js/simple_video.js`: UI logic

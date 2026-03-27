@@ -1,4 +1,4 @@
-# Simple Video Standalone User Guide
+# Generative Media Place User Guide
 
 This document is a complete guide to features actually available in the standalone edition of `simple_video_app`.
 
@@ -464,13 +464,50 @@ The panel can be dragged, minimized, and closed.
 - For reference image errors, re-check `📥 Image Drop` and character selection
 - Old `job_id` 404 may be resolved by regenerating
 
-## 11. Unsupported in Standalone
+## 11. Server Mode (Multi-User)
+
+Start with `start_server.sh` to run in server mode where multiple users can access simultaneously.
+
+### 11.1 Features
+
+- Data (state, images, video, audio) automatically isolated per session
+- UUID auto-generated per browser (localStorage + Cookie)
+- No interference between users
+
+### 11.2 How to Start
+
+```bash
+bash start_server.sh
+bash start_server.sh --host 0.0.0.0 --port 8090
+bash start_server.sh --comfyui-server 192.168.1.100:8188
+```
+
+Or:
+
+```bash
+SIMPLE_VIDEO_MULTI_USER=1 uvicorn app_server:app --host 0.0.0.0 --port 8090
+```
+
+### 11.3 Data Isolation Structure
+
+| Item | Path |
+|---|---|
+| Session state | `data/sessions/{session_id}/simple_video_state.json` |
+| Reference images | `data/sessions/{session_id}/ref_images/` |
+| Output files | Filtered by session ID within `output/{image,video,movie,audio}/` |
+| Temp files | `temp/{session_id}/` |
+
+### 11.4 Notes
+
+- ComfyUI is shared across all users; heavy concurrent jobs may cause queuing
+- Session data persists in `data/sessions/` after server restart
+
+## 12. Unsupported in Standalone
 
 - Utility features (generic API calls for main product)
 - Distributed mode
-- Multi-user concurrent operation (single-user assumption)
 
-## 12. Reference Links
+## 13. Reference Links
 
 - Quick Help: `/api/v1/simple-video/help/tutorial`
 - User Guide (this doc): `/api/v1/simple-video/help/guide`

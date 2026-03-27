@@ -1,6 +1,6 @@
 # Simple Video Standalone
 
-Version: v0.95.0
+Version: v0.95.1
 
 License: [MIT](./LICENSE)
 
@@ -10,12 +10,13 @@ Language: 日本語 | [English](./README_EN.md)
 
 公開リポジトリ向けに、利用者が必要な情報（導入・実行・操作・制約）に限定して記載しています。
 
-## v0.95.0 の価値
+## v0.95.1 の価値
 
 - **1つのUIで完結**: 画像（T2I/I2I）→ 動画（T2V/I2V/FLF）→ 音楽（T2A）→ 合成（M2V/V2M）
 - **プロンプト作業を短縮**: `🧠 シナリオ作成` → `🤖 プロンプト生成` の2ステップ
 - **画風の崩れを抑制**: 画風テンプレ + 画風一致ガードレールで連続生成の安定性を向上
 - **ACE-Step API 統合**: Thinking モード（高品質生成）と AI Tag 強化に対応
+- **サーバーモード**: マルチユーザー対応（セッション分離）
 
 ## 最短スタート（3ステップ）
 
@@ -74,14 +75,13 @@ Windows でもそのまま動作します。追加の変更は不要です。
 
 ## 対応範囲
 
-- single-user 前提
+- single-user（デフォルト）または multi-user（サーバーモード）
 - local ComfyUI 前提（既定 `127.0.0.1:8188`）
 - かんたん動画で使用する API のみ実装
 
 ### 非対応
 
 - distributed モード
-- 複数ユーザー同時運用
 - Standalone版での Utility 機能（本家向け機能）
 
 ## 要件
@@ -584,6 +584,53 @@ ACE_STEP_API_URL=http://127.0.0.1:8001 ./start.sh
 - Thinking モードは生成に数分〜10分かかることがあります
 - AI Tag 強化は ACE-Step API サーバー側の LM が必要です
 
+## サーバーモード（マルチユーザー）
+
+複数ユーザーが同時にアクセスできるサーバーモードで起動できます。
+セッションごとにデータ（状態・画像・動画・音声）が分離されるため、ユーザー間の干渉がありません。
+
+### 起動方法
+
+```bash
+# サーバーモードで起動（start.sh と同じオプションに対応）
+bash start_server.sh
+
+# ホスト・ポート指定
+bash start_server.sh --host 0.0.0.0 --port 8090
+
+# 各種オプション併用
+bash start_server.sh --comfyui-server 192.168.1.100:8188 --ace-step-url http://127.0.0.1:8001
+```
+
+または手動で環境変数を設定して起動:
+
+```bash
+SIMPLE_VIDEO_MULTI_USER=1 uvicorn app_server:app --host 0.0.0.0 --port 8090
+```
+
+### 仕組み
+
+| 項目 | 説明 |
+|---|---|
+| セッション ID | ブラウザごとに UUID を自動生成（localStorage + Cookie） |
+| データ分離 | `data/sessions/{session_id}/` 配下に状態・参照画像を保存 |
+| 出力分離 | `output/{image,video,movie,audio}/` 内をセッション ID で分離 |
+| テンポラリ | `temp/{session_id}/` で一時ファイルを分離 |
+
+### start.sh との違い
+
+| | `start.sh` | `start_server.sh` |
+|---|---|---|
+| デフォルト host | `127.0.0.1` | `0.0.0.0` |
+| デフォルト reload | `--reload` | off |
+| セッション分離 | off | on（`MULTI_USER=1`） |
+| ファイル | `app:app` | `app_server:app` |
+
+### 注意事項
+
+- ComfyUI は全ユーザーで共有されるため、同時に大量のジョブを投入すると待ちが発生します
+- セッションデータはサーバー再起動後も `data/sessions/` に残ります（手動削除で管理）
+
 ## クイックチェック
 
 ```bash
@@ -601,7 +648,9 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 ## 主要ファイル
 
 - `app.py`: FastAPI サーバ（静的配信 + API）
+- `app_server.py`: マルチユーザー版エントリポイント
 - `start.sh`: standalone 起動スクリプト
+- `start_server.sh`: マルチユーザー版起動スクリプト
 - `static/index.html`: かんたん動画画面
 - `static/js/bootstrap.js`: 初期化と Help パネル制御
 - `static/js/simple_video.js`: 画面ロジック
