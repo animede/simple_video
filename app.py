@@ -177,6 +177,7 @@ VLM_API_KEY = os.environ.get("VLM_API_KEY", OPENAI_API_KEY)
 VLM_MODEL = os.environ.get("VLM_MODEL", "gemma-3-27b-it")
 LOCAL_LLM_ENABLED = os.environ.get("SIMPLE_VIDEO_LOCAL_LLM", "").strip().lower() in ("1", "true", "yes", "on")
 ACE_STEP_URL = os.environ.get("ACE_STEP_API_URL", "").strip().rstrip("/") or None
+MULTI_USER = os.environ.get("SIMPLE_VIDEO_MULTI_USER", "").strip().lower() in ("1", "true", "yes", "on")
 
 WORKFLOW_NAMES: Dict[str, str] = {
     "qwen_t2i_2512_lightning4": "t2i_qwen_image_2512_lightning_api.json",
@@ -336,6 +337,7 @@ class Job:
     error: Optional[str] = None
     result: Dict[str, Any] = field(default_factory=dict)
     subscribers: set[asyncio.Queue] = field(default_factory=set)
+    session_id: Optional[str] = None
 
     def snapshot(self) -> Dict[str, Any]:
         payload = {
@@ -536,8 +538,10 @@ def _apply_basic_parameters(workflow: Dict[str, Any], payload: WorkflowRequest) 
     if payload.language is not None:
         params["language"] = payload.language
     if payload.duration is not None:
-        params["audio_duration"] = payload.duration
-        params["duration"] = payload.duration
+        # -1 means "auto" (ACE-Step API only). ComfyUI nodes require positive values.
+        _dur = payload.duration if payload.duration is not None and payload.duration > 0 else 60
+        params["audio_duration"] = _dur
+        params["duration"] = _dur
     if payload.bpm is not None:
         params["bpm"] = payload.bpm
     if payload.timesignature is not None:
@@ -886,7 +890,7 @@ async def execute_generate_job(job: Job) -> Dict[str, Any]:
     payload = WorkflowRequest(**job.request_payload)
     workflow = _load_workflow(payload.workflow)
     _apply_basic_parameters(workflow, payload)
-    await asyncio.to_thread(_sync_workflow_input_images_to_comfy_input, workflow)
+    await asyncio.to_thread(_sync_workflow_input_images_to_comfy_input, workflow, job.session_id)
 
     prompt_id = await asyncio.to_thread(_queue_prompt_to_comfyui, workflow)
     await job_manager.update(job, prompt_id=prompt_id, progress=0.1, message="Queued in ComfyUI")
@@ -947,7 +951,7 @@ async def execute_ace_step_api_job(job: Job) -> Dict[str, Any]:
     bpm_val = payload.bpm or params.get("bpm")
     keyscale_val = payload.keyscale or params.get("keyscale")
     timesig_val = payload.timesignature or params.get("timesignature", "4")
-    steps_val = payload.steps or params.get("steps") or 150
+    steps_val = payload.steps or params.get("steps") or 8  # Turbo default: 8, Base/SFT: 50
     cfg_val = payload.cfg or params.get("cfg") or 3.0
     seed_val = payload.seed or params.get("seed")
     thinking = payload.thinking if payload.thinking is not None else params.get("thinking", True)
@@ -1171,7 +1175,7 @@ def _build_output_item(filename: str, subfolder: str, media_type: str, out_type:
     }
 
 
-def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any]) -> None:
+def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any], session_id: Optional[str] = None) -> None:
     try:
         COMFY_INPUT_DIR.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -1179,6 +1183,9 @@ def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any]) -> None
 
     if not isinstance(workflow, dict):
         return
+
+    # Determine ref_images directory (session-aware)
+    ref_dir = _session_ref_images_dir(session_id)
 
     for node in workflow.values():
         if not isinstance(node, dict):
@@ -1200,9 +1207,14 @@ def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any]) -> None
         if source is None:
             source = _find_existing_media_file(safe_name, "", "input")
         if source is None:
-            source = REF_IMAGES_DIR / safe_name
-            if not source.exists() or not source.is_file():
-                source = None
+            # Check session-specific ref_images first, then global
+            candidate = ref_dir / safe_name
+            if candidate.exists() and candidate.is_file():
+                source = candidate
+            elif ref_dir != REF_IMAGES_DIR:
+                candidate = REF_IMAGES_DIR / safe_name
+                if candidate.exists() and candidate.is_file():
+                    source = candidate
         if source is None:
             continue
 
@@ -1403,21 +1415,38 @@ def _fallback_genre_tags_from_lyrics(lyrics: str) -> tuple[str, str]:
     secondary = ranked[1][0] if len(ranked) > 1 and ranked[1][1] > 0 and ranked[1][0] != primary else None
 
     tags: list[str] = []
+    # Dimension 2: instruments
+    if any(k in text for k in ["piano", "ピアノ"]):
+        tags.append("piano")
+    if any(k in text for k in ["guitar", "ギター"]):
+        tags.append("acoustic guitar")
+    if any(k in text for k in ["synth", "シンセ", "electronic", "電子"]):
+        tags.append("synth")
+
+    # Dimension 3: mood
     for tag, keys in mood_tags:
         if any(keyword in text for keyword in keys):
             tags.append(tag)
 
-    if any(k in text for k in ["piano", "ピアノ"]):
-        tags.append("piano")
-    if any(k in text for k in ["guitar", "ギター"]):
-        tags.append("guitar")
+    # Dimension 5: vocal hint (detect language from lyrics text)
+    has_jp = bool(re.search(r"[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]", str(lyrics or "")))
+    if has_jp:
+        tags.append("vocal")
+    elif any(k in text for k in ["she", "her", "girl", "彼女", "女"]):
+        tags.append("female vocal")
+    elif any(k in text for k in ["he ", "his ", "him ", "boy", "彼", "男"]):
+        tags.append("male vocal")
+    else:
+        tags.append("vocal")
+
+    # Additional atmosphere
     if any(k in text for k in ["night", "moon", "夜", "月"]):
-        tags.append("night")
+        tags.append("night atmosphere")
     if any(k in text for k in ["sky", "star", "空", "星"]):
         tags.append("cinematic")
 
     if not tags:
-        tags = ["emotional", "cinematic", "warm"]
+        tags = ["emotional", "cinematic", "warm", "vocal"]
 
     # keep order + dedup
     seen: set[str] = set()
@@ -1636,60 +1665,60 @@ def _fallback_lyrics_generate(
 
     if "japanese" in lang or lang in {"ja", "jp", "日本語"}:
         lyrics_body = "\n".join([
-            "[intro]",
-            "[inst]",
+            "[Intro]",
+            "[Instrumental]",
             "",
-            "[verse]",
+            "[Verse 1]",
             f"{theme} を胸に、静かに歩き出す",
             "夜を越えて、光のほうへ",
             "揺れる鼓動が、道しるべになる",
             "",
-            "[chorus]",
+            "[Chorus]",
             "君と描く未来を信じて",
             "何度でも歌う、この想いを",
             "涙のあとに、朝はくるから",
             "希望の空へ、飛び立とう",
             "",
-            "[outro]",
-            "[inst]",
+            "[Outro]",
+            "[Instrumental]",
         ])
     elif "chinese" in lang or lang in {"zh", "中文"}:
         lyrics_body = "\n".join([
-            "[intro]",
-            "[inst]",
+            "[Intro]",
+            "[Instrumental]",
             "",
-            "[verse]",
+            "[Verse 1]",
             f"带着 {theme} 的心愿慢慢前行",
             "穿过黑夜，迎向晨光",
             "心跳像灯火，照亮方向",
             "",
-            "[chorus]",
+            "[Chorus]",
             "我相信我们描绘的未来",
             "把所有思念唱成勇气",
             "风雨之后总会有晴天",
             "向着希望的天空飞去",
             "",
-            "[outro]",
-            "[inst]",
+            "[Outro]",
+            "[Instrumental]",
         ])
     else:
         lyrics_body = "\n".join([
-            "[intro]",
-            "[inst]",
+            "[Intro]",
+            "[Instrumental]",
             "",
-            "[verse]",
+            "[Verse 1]",
             f"With {theme} in my chest, I take the first step",
             "Through the night, I move toward the light",
             "Every heartbeat draws a clearer road",
             "",
-            "[chorus]",
+            "[Chorus]",
             "I believe in the future we can write",
             "I sing this feeling into open skies",
             "After the rain, a brighter dawn arrives",
             "We rise, we rise, we rise",
             "",
-            "[outro]",
-            "[inst]",
+            "[Outro]",
+            "[Instrumental]",
         ])
 
     _ = mood
@@ -2096,7 +2125,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         OUTPUT_DIR.joinpath("video").mkdir(parents=True, exist_ok=True)
 
         fps = int(req.fps or 16)
-        out_name = f"concat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        out_name = f"concat_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.mp4"
         out_path = OUTPUT_DIR / "video" / out_name
 
         xfade_type = (req.xfade_transition or "").strip().lower()
@@ -2255,7 +2284,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         video_path = await asyncio.to_thread(_resolve_media_path, req.video, "video")
         audio_path = await asyncio.to_thread(_resolve_media_path, req.audio, "audio")
         OUTPUT_DIR.joinpath("movie").mkdir(parents=True, exist_ok=True)
-        out_name = f"merged_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+        out_name = f"merged_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.mp4"
         out_path = OUTPUT_DIR / "movie" / out_name
         await job_manager.update(job, progress=0.55, message="Merging video and audio")
         cmd = [
@@ -2514,23 +2543,49 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             language=str(req.language or "English"),
         )
         system_role = (
-            "You are a professional lyricist for AI music generation (ACE-Step). "
+            "You are a professional lyricist for AI music generation (ACE-Step 1.5). "
+            "You understand ACE-Step section tags and vocal control tags deeply.\n"
             "Return first-line JSON metadata and then lyrics with section tags."
         )
         target_duration = int(req.lyrics_target_duration) if req.lyrics_target_duration else None
         if target_duration is not None:
             target_duration = max(5, min(300, target_duration))
+        lyrics_lang = str(req.language or 'English').strip()
+        # Word-count guideline based on ACE-Step docs (English: ~2-3 words/sec, Japanese: fewer chars)
+        is_ja = lyrics_lang.lower() in {'ja', 'jp', 'japanese', '日本語'}
+        is_zh = lyrics_lang.lower() in {'zh', 'chinese', '中文'}
+        if target_duration is not None:
+            if is_ja:
+                word_hint = f"Aim for roughly {max(20, round(target_duration * 1.0))}–{max(40, round(target_duration * 1.7))} characters of Japanese lyrics (excluding section tags)."
+            elif is_zh:
+                word_hint = f"Aim for roughly {max(20, round(target_duration * 1.0))}–{max(40, round(target_duration * 1.7))} characters of Chinese lyrics (excluding section tags)."
+            else:
+                word_hint = f"Aim for roughly {max(40, round(target_duration * 2.0))}–{max(70, round(target_duration * 3.0))} English words (excluding section tags)."
+        else:
+            word_hint = "Adjust lyrics length to fit the recommended duration."
         user_message = (
             f"THEME: {scenario_for_lyrics}\n"
             f"GENRE: {str(req.genre or 'pop').strip()}\n"
-            f"LANGUAGE: {str(req.language or 'English').strip()}\n"
+            f"LANGUAGE: {lyrics_lang}\n"
             f"TARGET_DURATION_SECONDS: {target_duration if target_duration is not None else 'auto'}\n"
-            "Output format:\n"
+            f"{word_hint}\n"
+            "\n"
+            "=== OUTPUT FORMAT ===\n"
             "1) First line JSON: {\"recommended_duration\": <int>, \"parts\": {...}}\n"
-            "2) Lyrics with [intro]/[verse]/[chorus]/[bridge]/[outro]/[inst] tags\n"
-            "IMPORTANT: Do NOT add romaji/romanization lines. Write lyrics in the target language only. "
-            "For Japanese, write only Japanese text — no parenthesized romanized readings.\n"
-            "No explanations."
+            "2) Lyrics with section tags (see rules below)\n"
+            "\n"
+            "=== SECTION TAG RULES (ACE-Step 1.5) ===\n"
+            "- Use capitalized tags: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Outro]\n"
+            "- Use [Instrumental] for instrument-only sections (NOT [inst] or [Inst])\n"
+            "- You may add a style hint with dash: [Chorus - anthemic], [Bridge - whispered]\n"
+            "- Separate sections with blank lines for breathing room\n"
+            "- Keep each line singable: 4-8 words (English) or 6-15 characters (Japanese) per line\n"
+            "- Use (parentheses) for backing vocals/echo: 'We are the light (the light)'\n"
+            "\n"
+            "=== IMPORTANT ===\n"
+            "- Do NOT add romaji/romanization lines. Write lyrics in the target language only.\n"
+            "- For Japanese, write only Japanese text — no parenthesized romanized readings.\n"
+            "- No explanations. Output JSON + lyrics only.\n"
         )
         try:
             response = await chat_req(client, user_message, system_role, temperature=0.8, max_tokens=4000)
@@ -2578,14 +2633,33 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         await job_manager.update(job, progress=0.25, message="Analyzing lyrics")
         client = get_openai_client()
         system_role = (
-            "You are a music genre and style expert. "
-            "Output exactly:\nGENRE: ...\nTAGS: ..."
+            "You are a music style/caption expert for ACE-Step 1.5 AI music generation.\n"
+            "Your task is to generate a Caption (comma-separated tags) that will be used as the \"prompt\" "
+            "field when generating music with ACE-Step 1.5.\n"
+            "\n"
+            "Output exactly two lines:\n"
+            "GENRE: <primary genre, e.g. pop / rock / jazz / electronic / ...>\n"
+            "TAGS: <3-7 comma-separated tags covering the 5 dimensions below>\n"
+            "\n"
+            "=== 5 CAPTION DIMENSIONS (include in this order) ===\n"
+            "1. Genre / Era: e.g. J-POP, 80s synth pop, jazz ballad, cinematic orchestral\n"
+            "2. Key instruments: e.g. piano, acoustic guitar, synth, strings, brass\n"
+            "3. Mood / adjective: e.g. emotional, uplifting, dark, dreamy, energetic\n"
+            "4. Tempo feel: e.g. slow tempo, mid-tempo, fast-paced, groovy (optional if obvious)\n"
+            "5. Vocal type: e.g. female vocal, male vocal, powerful, whisper, no vocals (optional)\n"
+            "\n"
+            "=== RULES ===\n"
+            "- 3-7 tags is the sweet spot. Never exceed 10.\n"
+            "- Do NOT include BPM numbers, key signatures, or time signatures in TAGS (those are set separately).\n"
+            "- Avoid contradictions: don't combine 'upbeat' + 'melancholic', or 'ambient' + 'metal'.\n"
+            "- Write tags in English for best ACE-Step compatibility.\n"
+            "- No explanations. Output GENRE and TAGS lines only."
         )
 
         try:
             response = await chat_req(
                 client,
-                f"Analyze these lyrics and suggest genre/tags:\n\n{lyrics[:2000]}",
+                f"Analyze these lyrics and suggest the best Caption tags for ACE-Step 1.5 music generation:\n\n{lyrics[:2000]}",
                 system_role,
                 temperature=0.3,
                 max_tokens=1000,
@@ -2726,6 +2800,8 @@ async def on_startup() -> None:
     print(_sep)
     print(f"  ワークフロー      : {WORKFLOWS_DIR}  ({sum(1 for _ in WORKFLOWS_DIR.glob('*.json'))} 件)")
     print(f"  アプリ データ     : {APP_DATA_DIR}")
+    _mu_label = "✅ ON (セッション分離有効)" if MULTI_USER else "OFF (single-user)"
+    print(f"  マルチユーザー    : {_mu_label}")
     print(f"{_sep}\n")
 
 
@@ -2735,24 +2811,64 @@ def _safe_name(filename: str) -> str:
     return raw or "upload.bin"
 
 
-def _read_ref_index() -> Dict[str, Dict[str, Any]]:
-    if not REF_IMAGES_INDEX.exists():
+# ---------------------------------------------------------------------------
+# Session isolation helpers
+# ---------------------------------------------------------------------------
+
+def _session_dir(session_id: Optional[str]) -> Optional[Path]:
+    """Return a per-session data directory, or None if session isolation is off."""
+    if not MULTI_USER:
+        return None
+    if not session_id or not str(session_id).strip():
+        return None
+    safe = re.sub(r'[^a-zA-Z0-9_-]', '', str(session_id).strip())[:64]
+    if not safe:
+        return None
+    d = APP_DATA_DIR / "sessions" / safe
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _session_state_file(session_id: Optional[str]) -> Path:
+    d = _session_dir(session_id)
+    return (d / "state.json") if d else STATE_FILE
+
+
+def _session_ref_index_path(session_id: Optional[str]) -> Path:
+    d = _session_dir(session_id)
+    return (d / "ref_images.json") if d else REF_IMAGES_INDEX
+
+
+def _session_ref_images_dir(session_id: Optional[str]) -> Path:
+    d = _session_dir(session_id)
+    if d:
+        rd = d / "ref_images"
+        rd.mkdir(parents=True, exist_ok=True)
+        return rd
+    return REF_IMAGES_DIR
+
+
+def _read_ref_index(session_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    idx_path = _session_ref_index_path(session_id)
+    if not idx_path.exists():
         return {}
     try:
-        return json.loads(REF_IMAGES_INDEX.read_text(encoding="utf-8"))
+        return json.loads(idx_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 
-def _write_ref_index(data: Dict[str, Dict[str, Any]]) -> None:
-    REF_IMAGES_INDEX.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+def _write_ref_index(data: Dict[str, Dict[str, Any]], session_id: Optional[str] = None) -> None:
+    idx_path = _session_ref_index_path(session_id)
+    idx_path.parent.mkdir(parents=True, exist_ok=True)
+    idx_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
     return {
         "ok": True,
-        "mode": "single-node-single-user",
+        "mode": "multi-user" if MULTI_USER else "single-node-single-user",
         "comfyui_server": COMFYUI_SERVER,
         "comfyui_dir": str(_comfyui_dir) if _comfyui_dir else "(not detected)",
         "comfy_input_dir": str(COMFY_INPUT_DIR),
@@ -2809,7 +2925,8 @@ async def ace_step_health() -> Dict[str, Any]:
 async def generate(request: WorkflowRequest) -> Dict[str, Any]:
     job_id = str(uuid.uuid4())
     workflow_name = request.workflow if isinstance(request.workflow, str) else "inline-json"
-    job = Job(job_id=job_id, workflow=str(workflow_name), request_payload=request.model_dump())
+    session_id = getattr(request, 'client_session_id', None)
+    job = Job(job_id=job_id, workflow=str(workflow_name), request_payload=request.model_dump(), session_id=session_id)
     await job_manager.add_job(job)
     return job.snapshot()
 
@@ -2844,10 +2961,16 @@ async def cancel_job(job_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/v1/jobs/{job_id}/interrupt")
-async def interrupt_job(job_id: str) -> Dict[str, Any]:
+async def interrupt_job(job_id: str, request: Request) -> Dict[str, Any]:
     job = await job_manager.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Session protection: prevent interrupting another session's job
+    if MULTI_USER and job.session_id:
+        caller_sid = request.query_params.get("client_session_id") or request.cookies.get("comfyui_client_session_id")
+        if caller_sid and caller_sid != job.session_id:
+            raise HTTPException(status_code=403, detail="Cannot interrupt another session's job")
 
     status = str(job.status or "")
     if status in {"completed", "failed", "cancelled"}:
@@ -2859,12 +2982,18 @@ async def interrupt_job(job_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/v1/interrupt")
-async def interrupt_active_jobs() -> Dict[str, Any]:
+async def interrupt_active_jobs(request: Request) -> Dict[str, Any]:
+    caller_sid = request.query_params.get("client_session_id") or request.cookies.get("comfyui_client_session_id")
     jobs = list(job_manager.jobs.values())
     processing_jobs = [job for job in jobs if str(job.status or "") == "processing"]
 
+    # In MULTI_USER mode, only interrupt the caller's own jobs
+    if MULTI_USER and caller_sid:
+        processing_jobs = [j for j in processing_jobs if j.session_id == caller_sid]
+
     if not processing_jobs:
-        await _interrupt_comfyui(None)
+        if not MULTI_USER:
+            await _interrupt_comfyui(None)
         return {"status": "ok", "interrupted_jobs": [], "message": "No processing jobs"}
 
     interrupted_ids: list[str] = []
@@ -2964,10 +3093,12 @@ async def utility(request: UtilityRequest):
         raise HTTPException(status_code=400, detail=f"Unknown utility workflow: {workflow}")
 
     job_id = str(uuid.uuid4())
+    session_id = getattr(request, 'client_session_id', None)
     job = Job(
         job_id=job_id,
         workflow=f"utility:{workflow}",
         request_payload=request.model_dump(),
+        session_id=session_id,
     )
     await job_manager.add_job(job)
     return job.snapshot()
@@ -3301,12 +3432,12 @@ async def view_file(request: Request, filename: str, subfolder: str = "", type: 
 
 @app.get("/api/v1/simple-video/state")
 async def get_simple_video_state(client_session_id: Optional[str] = None, session_mode: Optional[str] = None):
-    _ = client_session_id
     _ = session_mode
-    if not STATE_FILE.exists():
+    sf = _session_state_file(client_session_id)
+    if not sf.exists():
         return {"success": True, "state": None}
     try:
-        payload = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        payload = json.loads(sf.read_text(encoding="utf-8"))
     except Exception:
         payload = {}
     state = payload.get("state") if isinstance(payload, dict) else None
@@ -3315,21 +3446,21 @@ async def get_simple_video_state(client_session_id: Optional[str] = None, sessio
 
 @app.post("/api/v1/simple-video/state")
 async def save_simple_video_state(req: SimpleVideoStateRequest):
-    _ = req.client_session_id
     _ = req.session_mode
+    sf = _session_state_file(req.client_session_id)
+    sf.parent.mkdir(parents=True, exist_ok=True)
     wrapped = {
         "updated_at": time.time(),
         "state": req.state if isinstance(req.state, dict) else {},
     }
-    STATE_FILE.write_text(json.dumps(wrapped, ensure_ascii=False), encoding="utf-8")
+    sf.write_text(json.dumps(wrapped, ensure_ascii=False), encoding="utf-8")
     return {"success": True, "updated_at": wrapped["updated_at"]}
 
 
 @app.get("/api/v1/ref-images")
 async def list_ref_images(client_session_id: Optional[str] = None, session_mode: Optional[str] = None):
-    _ = client_session_id
     _ = session_mode
-    idx = _read_ref_index()
+    idx = _read_ref_index(client_session_id)
     items = []
     for name, data in idx.items():
         if not isinstance(data, dict):
@@ -3356,8 +3487,8 @@ async def register_ref_image(
     filename: Optional[str] = Form(None),
     original_filename: Optional[str] = Form(None),
 ):
-    _ = client_session_id
     _ = session_mode
+    ref_dir = _session_ref_images_dir(client_session_id)
     normalized_name = name.strip().lstrip("@")
     if not normalized_name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -3370,7 +3501,7 @@ async def register_ref_image(
         stem = Path(safe).stem
         suffix = Path(safe).suffix
         stored_name = f"{stem}_{uuid.uuid4().hex[:8]}{suffix}"
-        out = REF_IMAGES_DIR / stored_name
+        out = ref_dir / stored_name
         out.write_bytes(await file.read())
         if not orig_name:
             orig_name = file.filename or stored_name
@@ -3384,18 +3515,18 @@ async def register_ref_image(
         if not candidate.exists():
             raise HTTPException(status_code=404, detail=f"Source file not found: {filename}")
         stored_name = f"{candidate.stem}_{uuid.uuid4().hex[:8]}{candidate.suffix}"
-        out = REF_IMAGES_DIR / stored_name
+        out = ref_dir / stored_name
         out.write_bytes(candidate.read_bytes())
         if not orig_name:
             orig_name = filename
 
-    idx = _read_ref_index()
+    idx = _read_ref_index(client_session_id)
     idx[normalized_name] = {
         "filename": stored_name,
         "original_filename": orig_name or stored_name,
         "created_at": time.time(),
     }
-    _write_ref_index(idx)
+    _write_ref_index(idx, client_session_id)
 
     return {
         "success": True,
@@ -3409,29 +3540,31 @@ async def register_ref_image(
 
 @app.delete("/api/v1/ref-images/{name}")
 async def delete_ref_image(name: str, client_session_id: Optional[str] = None, session_mode: Optional[str] = None):
-    _ = client_session_id
     _ = session_mode
     normalized_name = name.strip().lstrip("@")
-    idx = _read_ref_index()
+    idx = _read_ref_index(client_session_id)
     if normalized_name not in idx:
         return {"success": True, "name": normalized_name}
     idx.pop(normalized_name, None)
-    _write_ref_index(idx)
+    _write_ref_index(idx, client_session_id)
     return {"success": True, "name": normalized_name}
 
 
 @app.get("/api/v1/ref-images/file/{name}")
 async def ref_image_file(name: str, client_session_id: Optional[str] = None):
-    _ = client_session_id
+    ref_dir = _session_ref_images_dir(client_session_id)
     normalized_name = name.strip().lstrip("@")
-    idx = _read_ref_index()
+    idx = _read_ref_index(client_session_id)
     row = idx.get(normalized_name)
     if not isinstance(row, dict):
         raise HTTPException(status_code=404, detail=f"Unknown ref image: {normalized_name}")
     filename = str(row.get("filename") or "").strip()
     if not filename:
         raise HTTPException(status_code=404, detail="Ref image has no file")
-    path = REF_IMAGES_DIR / _safe_name(filename)
+    path = ref_dir / _safe_name(filename)
+    if not path.exists() or not path.is_file():
+        # Fallback: check global ref_images dir
+        path = REF_IMAGES_DIR / _safe_name(filename)
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail=f"Ref image file not found: {filename}")
     media_type, _ = mimetypes.guess_type(str(path))

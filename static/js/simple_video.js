@@ -11,6 +11,18 @@
 
 const VIDEO_PRESETS = [
     {
+        id: 't2i_only',
+        name: '画像生成のみ（T2I）-- 動画生成なし',
+        description: 'プロンプトからT2Iで画像を1枚生成します。動画生成は行いません。',
+        icon: '🖼️',
+        requiresImage: false,
+        requiresCharacter: false,
+        imageOnly: true,  // No video generation steps
+        steps: [
+            { workflow: 'qwen_t2i_2512_lightning4', label: 'T2I画像生成' }
+        ]
+    },
+    {
         id: 't2i_i2v',
         name: 'テキストから初期画像生成し動画生成--シーン切替え動画',
         description: 'プロンプトだけで動画を生成（シーン毎に切り替わる）',
@@ -223,14 +235,14 @@ const SIMPLE_VIDEO_STANDALONE_CONFIG = (() => {
 
 const SIMPLE_VIDEO_UI_I18N = {
     ja: {
-        topbarTitle: '🎬 かんたん動画（Standalone）',
+        topbarTitle: '<span class="gmp-logo-text">Generative Media Place</span>',
         filesBtn: '📁 Files',
         helpBtn: '❓ Help',
         homeBtn: '🏠 Home',
         langJa: '日本語',
         langEn: 'English',
-        loading: '🎬 かんたん動画 UI 読み込み中...',
-        guideTitle: '❓ かんたん動画 Help',
+        loading: '🎬 Generative Media Place 読み込み中...',
+        guideTitle: '❓ Generative Media Place Help',
         guideTutorial: 'クイックヘルプ',
         guideTutorialFull: 'チュートリアル',
         guideGuide: 'USAGE',
@@ -639,7 +651,7 @@ const SimpleVideoUI = {
         t2aBpm: '120',
         t2aTimesignature: '4',
         t2aKeyscale: 'C major',
-        t2aSteps: '50',
+        t2aSteps: '8',
         t2aCfg: '3.0',
         t2aSeed: '',
         t2aThinking: true,          // ACE-Step API thinking mode (LM-enhanced)
@@ -852,7 +864,7 @@ function loadSimpleVideoState() {
             SimpleVideoUI.state.t2aTags = String(parsed.t2aTags || '');
             SimpleVideoUI.state.t2aLyrics = String(parsed.t2aLyrics || '');
             SimpleVideoUI.state.t2aLanguage = normalizeT2ALanguage(parsed.t2aLanguage);
-            SimpleVideoUI.state.t2aDuration = normalizeT2ANumber(parsed.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 });
+            SimpleVideoUI.state.t2aDuration = (String(parsed.t2aDuration) === 'auto') ? 'auto' : normalizeT2ANumber(parsed.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 });
             SimpleVideoUI.state.t2aBpm = normalizeT2ANumber(parsed.t2aBpm, { fallback: 120, min: 30, max: 240, precision: 0 });
             SimpleVideoUI.state.t2aTimesignature = normalizeT2ATimeSignature(parsed.t2aTimesignature);
             SimpleVideoUI.state.t2aKeyscale = normalizeT2AKeyscale(parsed.t2aKeyscale);
@@ -1725,7 +1737,18 @@ function renderSimpleVideoUI() {
                 </label>
                 <label class="simple-video-field simple-video-t2a-field-compact">
                     <span>Duration</span>
-                    <input class="simple-video-input" id="simpleVideoT2ADuration" inputmode="numeric" placeholder="30" />
+                    <select class="simple-video-select" id="simpleVideoT2ADuration">
+                        <option value="auto">Auto (AI推定)</option>
+                        <option value="15">15</option>
+                        <option value="30" selected>30</option>
+                        <option value="45">45</option>
+                        <option value="60">60</option>
+                        <option value="90">90</option>
+                        <option value="120">120</option>
+                        <option value="180">180</option>
+                        <option value="240">240</option>
+                        <option value="300">300</option>
+                    </select>
                 </label>
                 <label class="simple-video-field simple-video-t2a-field-compact">
                     <span>BPM</span>
@@ -2220,7 +2243,7 @@ function applySimpleVideoUILanguage() {
         langSelect.value = lang;
     }
 
-    setText('.simple-video-title', dict.topbarTitle);
+    { const _t = document.querySelector('.simple-video-title'); if (_t && typeof dict.topbarTitle === 'string') _t.innerHTML = dict.topbarTitle; }
     setById('simpleVideoFilesBtn', dict.filesBtn);
     setById('simpleVideoHelpBtn', dict.helpBtn);
     setById('simpleVideoBackBtn', dict.homeBtn);
@@ -2562,28 +2585,38 @@ function attachSimpleVideoEventListeners() {
             sanitizeT2AIntegerField(target);
         });
     };
-    bindT2AIntegerInputNormalize(t2aDurationInput);
 
-    const commitT2ADuration = (target) => {
-        const normalized = normalizeT2ANumber(target?.value, { fallback: 30, min: 1, max: 300, precision: 0 });
-        if (target) target.value = normalized;
-        SimpleVideoUI.state.t2aDuration = normalized;
-        saveSimpleVideoState();
-    };
-
+    // Duration is now a <select> — simple change handler
     t2aDurationInput?.addEventListener('change', (e) => {
-        commitT2ADuration(e.target);
+        const val = e.target.value;
+        SimpleVideoUI.state.t2aDuration = (val === 'auto') ? 'auto' : normalizeT2ANumber(val, { fallback: 30, min: 1, max: 300, precision: 0 });
+        saveSimpleVideoState();
     });
-    t2aDurationInput?.addEventListener('blur', (e) => {
-        commitT2ADuration(e.target);
-    });
-    t2aDurationInput?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            commitT2ADuration(e.target);
-            e.target.blur?.();
+
+    /** Sync the Duration <select> with a possibly non-standard value (e.g. V2M sets rounded-to-5 values). */
+    window._syncT2ADurationSelect = function(val) {
+        const sel = document.getElementById('simpleVideoT2ADuration');
+        if (!sel) return;
+        const strVal = String(val);
+        // If the option already exists, just select it
+        if ([...sel.options].some(o => o.value === strVal)) {
+            sel.value = strVal;
+            return;
         }
-    });
+        // For numeric values not in the fixed list, add a temporary option
+        const numVal = Number(strVal);
+        if (Number.isFinite(numVal) && numVal > 0) {
+            // Remove any previously-added dynamic option
+            const prev = sel.querySelector('option[data-dynamic]');
+            if (prev) prev.remove();
+            const opt = document.createElement('option');
+            opt.value = strVal;
+            opt.textContent = strVal;
+            opt.dataset.dynamic = '1';
+            sel.appendChild(opt);
+            sel.value = strVal;
+        }
+    };
 
     const t2aBpmInput = document.getElementById('simpleVideoT2ABpm');
     bindT2AIntegerInputNormalize(t2aBpmInput);
@@ -3254,7 +3287,7 @@ function attachSimpleVideoEventListeners() {
             SimpleVideoUI.state.t2aTimesignature = '4';
             SimpleVideoUI.state.t2aKeyscale = 'C major';
             SimpleVideoUI.state.t2aSteps = '8';
-            SimpleVideoUI.state.t2aCfg = '1.0';
+            SimpleVideoUI.state.t2aCfg = '3.0';
             SimpleVideoUI.state.t2aSeed = '';
             SimpleVideoUI.state.t2aSourceMode = 'generated';
             SimpleVideoUI.state.t2aGeneratedAudio = null;
@@ -4685,7 +4718,7 @@ async function startSimpleVideoT2AGeneration(options = {}) {
         tags: normalizeAceStepCaptionTags(aligned.tags),
         lyrics: String(state.t2aLyrics || '').trim(),
         language: normalizeT2ALanguage(state.t2aLanguage),
-        duration: Number(normalizeT2ANumber(state.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 })),
+        duration: (state.t2aDuration === 'auto') ? -1 : Number(normalizeT2ANumber(state.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 })),
         bpm: Number(normalizeT2ANumber(state.t2aBpm, { fallback: 120, min: 30, max: 240, precision: 0 })),
         timesignature: normalizeT2ATimeSignature(state.t2aTimesignature),
         keyscale: aligned.keyscale,
@@ -4900,7 +4933,7 @@ function normalizeAceStepCaptionTags(tagsText) {
     }
 
     const cleaned = Array.from(dedup.values()).slice(0, 14);
-    if (cleaned.length === 0) return 'pop, emotional, cinematic, clean mix';
+    if (cleaned.length === 0) return 'pop, emotional, cinematic, vocal, clean mix';
     return cleaned.join(', ');
 }
 
@@ -4978,7 +5011,7 @@ async function composeSimpleVideoT2ALyrics(options = {}) {
             scenario,
             genre: String(state.t2aTags || '').trim(),
             language: mapSimpleVideoT2ALanguageToLyricsLanguage(state.t2aLanguage),
-            lyrics_target_duration: Number(normalizeT2ANumber(state.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 }))
+            lyrics_target_duration: (state.t2aDuration === 'auto') ? null : Number(normalizeT2ANumber(state.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 }))
         };
 
         const job = await api.generateUtility(params);
@@ -5027,7 +5060,11 @@ async function composeSimpleVideoT2ALyrics(options = {}) {
         const lyricsInput = document.getElementById('simpleVideoT2ALyrics');
         if (lyricsInput) lyricsInput.value = state.t2aLyrics;
         const durationInput = document.getElementById('simpleVideoT2ADuration');
-        if (durationInput) durationInput.value = String(state.t2aDuration || '30');
+        if (durationInput && typeof window._syncT2ADurationSelect === 'function') {
+            window._syncT2ADurationSelect(state.t2aDuration);
+        } else if (durationInput) {
+            durationInput.value = String(state.t2aDuration || '30');
+        }
 
         if (autoStage) {
             setSimpleVideoT2AAutoStageProgress(autoStage, 1, '作詞 完了');
@@ -6226,7 +6263,7 @@ async function regenerateSingleSceneVideo(index) {
 
                     const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
                     const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
-                    const frames = getSceneFramesForIndex(segIdx, effectiveFps);
+                    const frames = computeLTXFrames(state.sceneLengthSec, effectiveFps);
 
                     const basePrompt = String(scenePrompts[segIdx] || '').trim();
                     const endPrompt = String(scenePrompts[segIdx + 1] || '').trim();
@@ -6264,7 +6301,7 @@ async function regenerateSingleSceneVideo(index) {
 
                     const fallbackFps = getDefaultFpsForVideoWorkflow(i2vWorkflow);
                     const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
-                    const frames = getSceneFramesForIndex(segIdx, effectiveFps);
+                    const frames = computeLTXFrames(state.sceneLengthSec, effectiveFps);
 
                     const params = {
                         prompt: String(scenePrompts[segIdx] || '').trim(),
@@ -7043,7 +7080,12 @@ function updateSimpleVideoUI() {
     }
     const t2aDurationInput = document.getElementById('simpleVideoT2ADuration');
     if (t2aDurationInput) {
-        t2aDurationInput.value = normalizeT2ANumber(state.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 });
+        const durVal = (state.t2aDuration === 'auto') ? 'auto' : normalizeT2ANumber(state.t2aDuration, { fallback: 30, min: 1, max: 300, precision: 0 });
+        if (typeof window._syncT2ADurationSelect === 'function') {
+            window._syncT2ADurationSelect(durVal);
+        } else {
+            t2aDurationInput.value = durVal;
+        }
     }
     const t2aBpmInput = document.getElementById('simpleVideoT2ABpm');
     if (t2aBpmInput) {
@@ -9565,6 +9607,9 @@ async function startSimpleVideoVideoToMusic() {
         }
 
         state.t2aDuration = String(roundVideoDurationForV2M(videoDuration));
+        if (typeof window._syncT2ADurationSelect === 'function') {
+            window._syncT2ADurationSelect(state.t2aDuration);
+        }
 
         if (!String(state.scenario || '').trim()) {
             const promptLines = parseScenePromptsFromText(state.llmPrompt);
@@ -9953,6 +9998,15 @@ async function startInitialImageGeneration() {
         }
         if (primaryImage) {
             params.input_image = primaryImage;
+        }
+
+        // If we have an input image but the workflow is T2I (no LoadImage node),
+        // the image will be ignored. Warn the user so they know T2I mode is active.
+        if (primaryImage && isT2IWorkflowId(wf)) {
+            console.log(`[SimpleVideo] 初期画像生成: T2Iモードのため入力画像(${primaryImage})は参照されません`);
+            if (typeof showToast === 'function') {
+                showToast('⚠️ 現在T2Iモードです。入力画像は参照されません。I2Iで参照するにはキャラ合成プリセットを選択してください', 'warning');
+            }
         }
 
         if (!primaryImage && isI2IWorkflowId(wf)) {
@@ -12926,6 +12980,47 @@ async function startGeneration() {
             return Math.min(7, Math.max(2, Math.round(raw)));
         };
         const getSceneFramesForIndex = (sceneIndex, fps) => computeLTXFrames(getSceneSecondsForIndex(sceneIndex), fps);
+
+        // === T2I only preset: generate a single image and stop ===
+        if (preset.imageOnly) {
+            state.totalSteps = 1;
+            const prompt = String(scenePrompts[0] || state.scenario || '').trim();
+            const t2iWf = normalizeWorkflowAlias(getConfiguredSimpleVideoWorkflow('t2i', 'qwen_t2i_2512_lightning4'));
+            const params = { prompt };
+            if (width && height) { params.width = width; params.height = height; }
+
+            setSimpleVideoProgress('🖼️ T2I画像生成中...', 0);
+
+            const res = await runWorkflowStep({
+                workflow: t2iWf,
+                label: 'T2I画像生成',
+                requestParams: params,
+                stepIndex: 0,
+                totalSteps: 1,
+            });
+
+            const imageOut = pickBestOutput(res.outputs, 'image');
+            if (imageOut?.filename) {
+                const previewUrl = getSimpleVideoDownloadURL(res.jobId, imageOut.filename);
+                state.keyImage = {
+                    jobId: String(res.jobId),
+                    filename: String(imageOut.filename),
+                    originalName: `T2I_${new Date().toLocaleTimeString()}`,
+                    previewUrl,
+                };
+                state.uploadedImage = { ...state.keyImage };
+                saveSimpleVideoState();
+                updateSimpleVideoUI();
+            }
+
+            renderSimpleVideoOutputMedia({
+                jobId: res.jobId,
+                outputs: res.outputs,
+                title: 'T2I画像生成結果',
+            });
+
+            return;  // T2I only — skip video generation
+        }
 
         // Special pipeline: Full Auto style character video (I2I + FLF + I2V)
         if (String(preset.id || '') === 'char_i2i_flf') {

@@ -6789,15 +6789,27 @@ body.simple-video-enabled #simpleVideoLeft {
 }
 
 .simple-video-header .simple-video-title {
-    font-size: 20px;
-    font-weight: 600;
+    font-size: 26px;
+    font-weight: 700;
     color: var(--text-primary);
 }
 
 .simple-video-topbar .simple-video-title {
-    font-size: 16px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--text-primary);
+}
+
+/* ── GMP Logo text styling ── */
+.gmp-logo-text {
+    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 40%, #f472b6 70%, #fb923c 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    font-size: inherit;
+    filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.25));
 }
 
 .simple-video-topbar-actions {
@@ -7754,7 +7766,7 @@ body.simple-video-enabled #simpleVideoLeft {
 
 /* Colored title bars for major sections */
 .simple-video-title-character {
-    background: rgba(120, 80, 200, 0.22);
+    background: rgba(120, 80, 200, 0.40);
     border-left: 3px solid #7B50C8;
     padding: 6px 10px;
     border-radius: 6px;
@@ -7765,7 +7777,7 @@ body.simple-video-enabled #simpleVideoLeft {
 }
 
 .simple-video-title-music {
-    background: rgba(220, 140, 0, 0.22);
+    background: rgba(220, 140, 0, 0.40);
     border-left: 3px solid #DC8C00;
     padding: 6px 10px;
     border-radius: 6px;
@@ -7776,7 +7788,7 @@ body.simple-video-enabled #simpleVideoLeft {
 }
 
 .simple-video-title-keyimage {
-    background: rgba(50, 100, 200, 0.22);
+    background: rgba(50, 100, 200, 0.40);
     border-left: 3px solid #3264C8;
     padding: 6px 10px;
     border-radius: 6px;
@@ -7787,7 +7799,7 @@ body.simple-video-enabled #simpleVideoLeft {
 }
 
 .simple-video-title-output {
-    background: rgba(30, 150, 90, 0.22);
+    background: rgba(30, 150, 90, 0.40);
     border-left: 3px solid #1E965A;
     padding: 6px 10px;
     border-radius: 6px;
@@ -7798,7 +7810,7 @@ body.simple-video-enabled #simpleVideoLeft {
 }
 
 .simple-video-title-videogen {
-    background: rgba(200, 50, 50, 0.22);
+    background: rgba(200, 50, 50, 0.40);
     border-left: 3px solid #C83232;
     padding: 6px 10px;
     border-radius: 6px;
