@@ -2730,7 +2730,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
     raise RuntimeError(f"Unknown utility workflow: {workflow}")
 
 
-app = FastAPI(title="Simple Video Standalone + API", version="91.0")
+app = FastAPI(title="Simple Video Standalone + API", version="0.95.1")
 
 # Allow cross-origin requests (needed for VS Code port forwarding, reverse proxies, etc.)
 app.add_middleware(
