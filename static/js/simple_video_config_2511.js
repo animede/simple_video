@@ -1,5 +1,5 @@
 window.SimpleVideoStandaloneConfig = {
-    enableLtx: false,
+    enableLtx: true,
     showGenerateAudioOption: false,
     lockI2IWorkflow: true,
     workflows: {

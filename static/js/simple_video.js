@@ -542,6 +542,8 @@ function applyWorkflowSpeedOption(workflowId, useFast) {
 
         if (wf.startsWith('ltx2_i2v')) return i2vTarget;
         if (wf.startsWith('ltx2_t2v')) return t2vTarget;
+        // FLF → LTX 2.3 FLF
+        if (isFLFWorkflowId(wf) || wf.startsWith('ltx2_3_flf')) return 'ltx2_3_flf';
         if (isI2VWorkflowId(wf)) return i2vTarget;
         if (isT2VWorkflowId(wf)) return t2vTarget;
         if (wf.startsWith('ltx2_')) return wf;
@@ -555,9 +557,9 @@ function applyWorkflowSpeedOption(workflowId, useFast) {
 function getEffectivePresetStepsForCurrentOptions(preset) {
     const rawSteps = Array.isArray(preset?.steps) ? preset.steps : [];
     
-    // FLF presets don't support LTX fast option - they use WAN workflows
+    // FLF presets now also support LTX fast option via ltx2_3_flf
     const hasFLF = rawSteps.some(s => isFLFWorkflowId(s?.workflow)) || String(preset?.id || '').includes('flf');
-    const useFast = (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx || hasFLF) ? false : !!SimpleVideoUI.state.useFast;
+    const useFast = (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) ? false : !!SimpleVideoUI.state.useFast;
 
     const steps = [];
     for (const step of rawSteps) {
