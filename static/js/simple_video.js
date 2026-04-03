@@ -6982,11 +6982,9 @@ function selectPreset(presetId) {
         if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
             fast.closest('.simple-video-sequence-flag').style.display = 'none';
             fast.disabled = true;
-        } else if (hasFLF) {
-            fast.closest('.simple-video-sequence-flag').style.display = 'none';
         } else {
             fast.closest('.simple-video-sequence-flag').style.display = '';
-            const shouldDisable = !hasVideo;
+            const shouldDisable = !hasVideo && !hasFLF;
             fast.disabled = shouldDisable;
             fast.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
         }
@@ -6996,11 +6994,9 @@ function selectPreset(presetId) {
         if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
             ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
             ltxVariant.disabled = true;
-        } else if (hasFLF) {
-            ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
         } else {
             ltxVariant.closest('.simple-video-sequence-flag').style.display = '';
-            const shouldDisable = !hasVideo || !SimpleVideoUI.state.useFast;
+            const shouldDisable = (!hasVideo && !hasFLF) || !SimpleVideoUI.state.useFast;
             ltxVariant.disabled = shouldDisable;
             ltxVariant.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
         }
@@ -7433,11 +7429,9 @@ function updateSimpleVideoUI() {
             if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
                 fast.closest('.simple-video-sequence-flag').style.display = 'none';
                 fast.disabled = true;
-            } else if (hasFLF) {
-                fast.closest('.simple-video-sequence-flag').style.display = 'none';
             } else {
                 fast.closest('.simple-video-sequence-flag').style.display = '';
-                const shouldDisable = !hasVideo;
+                const shouldDisable = !hasVideo && !hasFLF;
                 fast.disabled = shouldDisable;
                 fast.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
             }
@@ -7447,11 +7441,9 @@ function updateSimpleVideoUI() {
             if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
                 ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
                 ltxVariant.disabled = true;
-            } else if (hasFLF) {
-                ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
             } else {
                 ltxVariant.closest('.simple-video-sequence-flag').style.display = '';
-                const shouldDisable = !hasVideo || !state.useFast;
+                const shouldDisable = (!hasVideo && !hasFLF) || !state.useFast;
                 ltxVariant.disabled = shouldDisable;
                 ltxVariant.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
             }
