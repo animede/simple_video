@@ -6237,7 +6237,8 @@ async function regenerateSingleSceneVideo(index) {
         if (preset.mixedTransitions) {
             // Mixed pipeline: per-boundary FLF or I2V based on transition type
             const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
             const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
             const fpsRaw = Number(state.fps);
 
@@ -6341,7 +6342,8 @@ async function regenerateSingleSceneVideo(index) {
                 });
             }
         } else if (hasFLF) {
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
             const fpsRaw = Number(state.fps);
             const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
             const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
@@ -13035,7 +13037,8 @@ async function startGeneration() {
             }
 
             // FLF品質設定: speed=4-step(高速), quality=20-step(高品質)
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
 
             const hasPreparedForThisPreset = !!(
                 state.preparedVideoInitialImage?.filename
@@ -13332,7 +13335,8 @@ async function startGeneration() {
             }
 
             // FLF品質設定: speed=4-step(高速), quality=20-step(高品質)
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
 
             const desiredMidCount = Math.max(1, sceneCount);
             const scenarioFP = computeScenarioFingerprint(state.scenario, scenePrompts);
@@ -13949,7 +13953,8 @@ async function startGeneration() {
 
             // I2V and FLF workflows
             const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
 
             // Transition array from LLM (index 0 = first scene, always 'none')
             const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
