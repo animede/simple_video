@@ -456,8 +456,17 @@ function computeLTXFrames(seconds, fps) {
 function getDefaultFpsForVideoWorkflow(workflowId) {
     const wf = normalizeWorkflowAlias(workflowId);
     if (!wf) return 16;
-    if (wf.startsWith('ltx2_')) return 24;
+    if (wf.startsWith('ltx2_')) return 25;
     return 16;
+}
+
+/**
+ * Returns true if the workflow generates audio natively (LTX 2.3+).
+ * Older LTX 2.x and WAN workflows do NOT produce audio.
+ */
+function hasNativeAudioWorkflow(workflowId) {
+    const wf = normalizeWorkflowAlias(workflowId);
+    return String(wf || '').startsWith('ltx2_3_');
 }
 
 function syncFpsForCurrentOptions({ forceUI = true } = {}) {
@@ -472,7 +481,7 @@ function syncFpsForCurrentOptions({ forceUI = true } = {}) {
             SimpleVideoUI.state.fpsBackup = String(SimpleVideoUI.state.fps ?? '');
         }
         SimpleVideoUI.state.ltxFpsForced = true;
-        SimpleVideoUI.state.fps = '24';
+        SimpleVideoUI.state.fps = '25';
 
         // When switching to LTX, set appropriate size if current is auto or WAN default
         // BUT respect user's manual selection
@@ -1561,7 +1570,7 @@ function renderSimpleVideoUI() {
             <div class="simple-video-character-analysis" id="simpleVideoKeyImageAnalysis" style="display:none;">
                 <div class="simple-video-character-analysis-status" id="simpleVideoKeyImageAnalysisStatus"></div>
                 <div class="simple-video-character-analysis-result" id="simpleVideoKeyImageAnalysisResult">
-                    <div class="simple-video-character-analysis-text" id="simpleVideoKeyImageAnalysisText"></div>
+                    <textarea class="simple-video-character-analysis-text" id="simpleVideoKeyImageAnalysisText" rows="4"></textarea>
                 </div>
                 <div class="simple-video-character-analysis-options">
                     <label class="simple-video-checkbox-label">
@@ -3103,6 +3112,16 @@ function attachSimpleVideoEventListeners() {
     keyImageAnalyzeBtn?.addEventListener('click', async (e) => {
         e.preventDefault();
         await runKeyImageAnalysis();
+    });
+
+    // Key image analysis text editing
+    const keyImageAnalysisText = document.getElementById('simpleVideoKeyImageAnalysisText');
+    keyImageAnalysisText?.addEventListener('input', (e) => {
+        SimpleVideoUI.state.keyImageAnalysis = e.target.value;
+        if (SimpleVideoUI.state.keyImageAnalysisRaw) {
+            SimpleVideoUI.state.keyImageAnalysisRaw.prompt = e.target.value;
+        }
+        saveSimpleVideoState();
     });
 
     // Reference source selection for char_edit_i2i_flf
@@ -6312,7 +6331,10 @@ async function regenerateSingleSceneVideo(index) {
                         fps: effectiveFps,
                     };
                     if (Number.isFinite(frames) && frames > 0) params.frames = frames;
-                    if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                    if (hasNativeAudioWorkflow(i2vWorkflow)) {
+                        // LTX 2.3+ generates audio natively — keep it
+                        params.strip_audio = false;
+                    } else if (String(i2vWorkflow || '').startsWith('ltx2_')) {
                         params.strip_audio = !state.generateAudio;
                     }
                     if (width && height) { params.width = width; params.height = height; }
@@ -6422,7 +6444,10 @@ async function regenerateSingleSceneVideo(index) {
                 fps: effectiveFps,
             };
             if (Number.isFinite(frames) && frames > 0) params.frames = frames;
-            if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+            if (hasNativeAudioWorkflow(i2vWorkflow)) {
+                // LTX 2.3+ generates audio natively — keep it
+                params.strip_audio = false;
+            } else if (String(i2vWorkflow || '').startsWith('ltx2_')) {
                 params.strip_audio = !state.generateAudio;
             }
 
@@ -7961,7 +7986,7 @@ function updateKeyImageAnalysisUI() {
         
         if (hasAnalysis) {
             const textEl = document.getElementById('simpleVideoKeyImageAnalysisText');
-            if (textEl) textEl.textContent = state.keyImageAnalysis || '';
+            if (textEl) textEl.value = state.keyImageAnalysis || '';
         }
     }
 }
@@ -8077,7 +8102,7 @@ async function runKeyImageAnalysis() {
     }
     if (resultEl) resultEl.style.display = 'none';
     if (optionsWrap) optionsWrap.style.display = 'none';
-    if (textEl) textEl.textContent = '';
+    if (textEl) textEl.value = '';
     
     try {
         // Get image URL
@@ -8138,7 +8163,7 @@ async function runKeyImageAnalysis() {
         };
         saveSimpleVideoState();
         
-        if (textEl) textEl.textContent = parsed.prompt || result.description || '';
+        if (textEl) textEl.value = parsed.prompt || result.description || '';
         if (resultEl) resultEl.style.display = '';
         if (optionsWrap) optionsWrap.style.display = '';
         if (statusEl) statusEl.textContent = `✅ 解析完了 (${result.elapsed_time}秒)`;
@@ -12841,7 +12866,11 @@ async function runSceneVideosConcatFromState({ presetId, title = '結合結果�
         workflow: 'video_concat',
         videos,
         fps: concatFps,
-        keep_audio: !!SimpleVideoUI.state.generateAudio,
+        keep_audio: !!SimpleVideoUI.state.generateAudio || (() => {
+            const p = VIDEO_PRESETS.find(x => x.id === (pid || SimpleVideoUI.state.selectedPreset));
+            const steps = p ? getEffectivePresetStepsForCurrentOptions(p) : [];
+            return steps.some(s => hasNativeAudioWorkflow(s?.workflow));
+        })(),
         ...getPerBoundaryXfadeParams(),
     });
     const concatJobId = concatJob?.job_id;
@@ -12943,7 +12972,8 @@ async function startGeneration() {
         }
     }
 
-    // Note: LTX workflows default to stripping audio unless strip_audio=false is passed.
+    // Note: LTX 2.3+ workflows generate audio natively; strip_audio is set to false to preserve it.
+    // Older LTX workflows default to stripping audio unless generateAudio is enabled (ACE-Step).
 
     state.isGenerating = true;
     state.currentStep = 0;
@@ -13266,7 +13296,7 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio,
+                    keep_audio: !!state.generateAudio || hasNativeAudioWorkflow(flfWorkflow),
                     ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
@@ -13577,7 +13607,7 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio,
+                    keep_audio: !!state.generateAudio || hasNativeAudioWorkflow(flfWorkflow),
                     ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
@@ -13829,7 +13859,11 @@ async function startGeneration() {
                 if (Number.isFinite(frames) && frames > 0) params.frames = frames;
 
                 // LTX audio setting
-                if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                if (hasNativeAudioWorkflow(i2vWorkflow)) {
+                    // LTX 2.3+ generates audio natively — keep it
+                    params.strip_audio = false;
+                    console.log('[SimpleVideo] LTX 2.3 native audio: strip_audio=false');
+                } else if (String(i2vWorkflow || '').startsWith('ltx2_')) {
                     params.strip_audio = !state.generateAudio;
                     console.log('[SimpleVideo] LTX audio setting: generateAudio=', state.generateAudio, 'strip_audio=', params.strip_audio);
                 }
@@ -13880,7 +13914,7 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio,
+                    keep_audio: !!state.generateAudio || hasNativeAudioWorkflow(i2vWorkflow),
                     ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
@@ -14193,7 +14227,10 @@ async function startGeneration() {
                     if (Number.isFinite(frames) && frames > 0) params.frames = frames;
 
                     // LTX audio setting
-                    if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                    if (hasNativeAudioWorkflow(i2vWorkflow)) {
+                        // LTX 2.3+ generates audio natively — keep it
+                        params.strip_audio = false;
+                    } else if (String(i2vWorkflow || '').startsWith('ltx2_')) {
                         params.strip_audio = !state.generateAudio;
                     }
 
@@ -14244,7 +14281,7 @@ async function startGeneration() {
                     workflow: 'video_concat',
                     videos: sceneVideoBasenames,
                     fps: concatFps,
-                    keep_audio: !!state.generateAudio,
+                    keep_audio: !!state.generateAudio || hasNativeAudioWorkflow(i2vWorkflow) || hasNativeAudioWorkflow(flfWorkflow),
                     ...getPerBoundaryXfadeParams(),
                 });
                 const concatJobId = concatJob?.job_id;
@@ -14469,7 +14506,10 @@ async function startGeneration() {
                 if (Number.isFinite(frames) && frames > 0) params.frames = frames;
             }
 
-            if (String(wf || '').startsWith('ltx2_')) {
+            if (hasNativeAudioWorkflow(wf)) {
+                // LTX 2.3+ generates audio natively — keep it
+                params.strip_audio = false;
+            } else if (String(wf || '').startsWith('ltx2_')) {
                 params.strip_audio = !state.generateAudio;
             }
 
@@ -14629,7 +14669,11 @@ async function startGeneration() {
                 }
 
                 // LTX: default server behavior is to strip audio unless explicitly disabled.
-                if (String(wf || '').startsWith('ltx2_')) {
+                if (hasNativeAudioWorkflow(wf)) {
+                    // LTX 2.3+ generates audio natively — keep it
+                    params.strip_audio = false;
+                    console.log('[SimpleVideo] LTX 2.3 native audio: strip_audio=false');
+                } else if (String(wf || '').startsWith('ltx2_')) {
                     params.strip_audio = !state.generateAudio;
                     console.log('[SimpleVideo] LTX audio setting: generateAudio=', state.generateAudio, 'strip_audio=', params.strip_audio);
                 }
@@ -14713,7 +14757,7 @@ async function startGeneration() {
                 workflow: 'video_concat',
                 videos: sceneVideoBasenames,
                 fps: concatFps,
-                keep_audio: !!state.generateAudio,
+                keep_audio: !!state.generateAudio || effectiveSteps.some(s => hasNativeAudioWorkflow(s?.workflow)),
                 ...getPerBoundaryXfadeParams(),
             });
             const concatJobId = concatJob?.job_id;
