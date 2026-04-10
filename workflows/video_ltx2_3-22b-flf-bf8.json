@@ -1,0 +1,526 @@
+{
+  "31": {
+    "inputs": {
+      "image": "high_view_classic_car.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load First Frame"
+    }
+  },
+  "39": {
+    "inputs": {
+      "image": "low_view_classic_car.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Last Frame"
+    }
+  },
+  "68": {
+    "inputs": {
+      "filename_prefix": "video/ltx2.3_flf2v",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "122",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "ビデオを保存"
+    }
+  },
+  "98": {
+    "inputs": {
+      "value": 720
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "HEIGHT"
+    }
+  },
+  "99": {
+    "inputs": {
+      "img_compression": 25,
+      "image": [
+        "125",
+        0
+      ]
+    },
+    "class_type": "LTXVPreprocess",
+    "_meta": {
+      "title": "LTXVPreprocess"
+    }
+  },
+  "100": {
+    "inputs": {
+      "noise_seed": 315253765879496
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "ランダムノイズ"
+    }
+  },
+  "101": {
+    "inputs": {
+      "frames_number": [
+        "102",
+        0
+      ],
+      "frame_rate": [
+        "114",
+        0
+      ],
+      "batch_size": 1,
+      "audio_vae": [
+        "126",
+        0
+      ]
+    },
+    "class_type": "LTXVEmptyLatentAudio",
+    "_meta": {
+      "title": "LTXV 空のラテントオーディオ"
+    }
+  },
+  "102": {
+    "inputs": {
+      "value": 121
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Length"
+    }
+  },
+  "103": {
+    "inputs": {
+      "text_encoder": "gemma_3_12B_it_fp4_mixed.safetensors",
+      "ckpt_name": "ltx-2.3-22b-distilled-fp8.safetensors",
+      "device": "default"
+    },
+    "class_type": "LTXAVTextEncoderLoader",
+    "_meta": {
+      "title": "LTXV オーディオテキストエンコーダーローダー"
+    }
+  },
+  "104": {
+    "inputs": {
+      "img_compression": 25,
+      "image": [
+        "124",
+        0
+      ]
+    },
+    "class_type": "LTXVPreprocess",
+    "_meta": {
+      "title": "LTXVPreprocess"
+    }
+  },
+  "105": {
+    "inputs": {
+      "tile_size": 768,
+      "overlap": 64,
+      "temporal_size": 4096,
+      "temporal_overlap": 64,
+      "samples": [
+        "106",
+        2
+      ],
+      "vae": [
+        "127",
+        2
+      ]
+    },
+    "class_type": "VAEDecodeTiled",
+    "_meta": {
+      "title": "VAEデコード（タイル）"
+    }
+  },
+  "106": {
+    "inputs": {
+      "positive": [
+        "111",
+        0
+      ],
+      "negative": [
+        "111",
+        1
+      ],
+      "latent": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "LTXVCropGuides",
+    "_meta": {
+      "title": "LTXVCropGuides"
+    }
+  },
+  "107": {
+    "inputs": {
+      "samples": [
+        "121",
+        1
+      ],
+      "audio_vae": [
+        "126",
+        0
+      ]
+    },
+    "class_type": "LTXVAudioVAEDecode",
+    "_meta": {
+      "title": "LTXV オーディオVAEデコード"
+    }
+  },
+  "108": {
+    "inputs": {
+      "width": [
+        "110",
+        0
+      ],
+      "height": [
+        "110",
+        1
+      ],
+      "length": [
+        "102",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLTXVLatentVideo",
+    "_meta": {
+      "title": "空のLTXV潜在ビデオ"
+    }
+  },
+  "109": {
+    "inputs": {
+      "frame_rate": [
+        "123",
+        0
+      ],
+      "positive": [
+        "128",
+        0
+      ],
+      "negative": [
+        "112",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXV条件付け"
+    }
+  },
+  "110": {
+    "inputs": {
+      "image": [
+        "124",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "画像サイズ取得"
+    }
+  },
+  "111": {
+    "inputs": {
+      "frame_idx": -1,
+      "strength": 0.7,
+      "positive": [
+        "115",
+        0
+      ],
+      "negative": [
+        "115",
+        1
+      ],
+      "vae": [
+        "127",
+        2
+      ],
+      "latent": [
+        "115",
+        2
+      ],
+      "image": [
+        "99",
+        0
+      ]
+    },
+    "class_type": "LTXVAddGuide",
+    "_meta": {
+      "title": "LTXVAddGuide"
+    }
+  },
+  "112": {
+    "inputs": {
+      "text": "blurry, out of focus, overexposed, underexposed, low contrast, washed out colors, excessive noise, grainy texture, poor lighting, flickering, motion blur, distorted proportions, unnatural skin tones, deformed facial features, asymmetrical face, missing facial features, extra limbs, disfigured hands, wrong hand count, artifacts around text, unreadable text on shirt or hat, incorrect lettering on cap (“PNTR”), incorrect t-shirt slogan (“JUST DO IT”), missing microphone, misplaced microphone, inconsistent perspective, camera shake, incorrect depth of field, background too sharp, background clutter, distracting reflections, harsh shadows, inconsistent lighting direction, color banding, cartoonish rendering, 3D CGI look, unrealistic materials, uncanny valley effect, incorrect ethnicity, wrong gender, exaggerated expressions, smiling, laughing, exaggerated sadness, wrong gaze direction, eyes looking at camera, mismatched lip sync, silent or muted audio, distorted voice, robotic voice, echo, background noise, off-sync audio, missing sniff sounds, incorrect dialogue, added dialogue, repetitive speech, jittery movement, awkward pauses, incorrect timing, unnatural transitions, inconsistent framing, tilted camera, missing door or shelves, missing shallow depth of field, flat lighting, inconsistent tone, cinematic oversaturation, stylized filters, or AI artifacts.",
+      "clip": [
+        "103",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIPテキストエンコード（プロンプト）"
+    }
+  },
+  "113": {
+    "inputs": {
+      "value": 1280
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "WIDTH"
+    }
+  },
+  "114": {
+    "inputs": {
+      "value": 25
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Frame Rate(int)"
+    }
+  },
+  "115": {
+    "inputs": {
+      "frame_idx": 0,
+      "strength": 0.7,
+      "positive": [
+        "109",
+        0
+      ],
+      "negative": [
+        "109",
+        1
+      ],
+      "vae": [
+        "127",
+        2
+      ],
+      "latent": [
+        "108",
+        0
+      ],
+      "image": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "LTXVAddGuide",
+    "_meta": {
+      "title": "LTXVAddGuide"
+    }
+  },
+  "116": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "127",
+        0
+      ],
+      "positive": [
+        "111",
+        0
+      ],
+      "negative": [
+        "111",
+        1
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFGガイダー"
+    }
+  },
+  "117": {
+    "inputs": {
+      "eta": 0,
+      "s_noise": 1
+    },
+    "class_type": "SamplerEulerAncestral",
+    "_meta": {
+      "title": "サンプラーオイラー祖先"
+    }
+  },
+  "118": {
+    "inputs": {
+      "sigmas": "1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"
+    },
+    "class_type": "ManualSigmas",
+    "_meta": {
+      "title": "マニュアルシグマ"
+    }
+  },
+  "119": {
+    "inputs": {
+      "video_latent": [
+        "111",
+        2
+      ],
+      "audio_latent": [
+        "101",
+        0
+      ]
+    },
+    "class_type": "LTXVConcatAVLatent",
+    "_meta": {
+      "title": "LTXVConcatAVLatent"
+    }
+  },
+  "120": {
+    "inputs": {
+      "noise": [
+        "100",
+        0
+      ],
+      "guider": [
+        "116",
+        0
+      ],
+      "sampler": [
+        "117",
+        0
+      ],
+      "sigmas": [
+        "118",
+        0
+      ],
+      "latent_image": [
+        "119",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "カスタムサンプラー（高度）"
+    }
+  },
+  "121": {
+    "inputs": {
+      "av_latent": [
+        "120",
+        1
+      ]
+    },
+    "class_type": "LTXVSeparateAVLatent",
+    "_meta": {
+      "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "122": {
+    "inputs": {
+      "fps": [
+        "123",
+        0
+      ],
+      "images": [
+        "105",
+        0
+      ],
+      "audio": [
+        "107",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "動画を作成"
+    }
+  },
+  "123": {
+    "inputs": {
+      "expression": "a",
+      "values.a": [
+        "114",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "124": {
+    "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": [
+        "113",
+        0
+      ],
+      "resize_type.height": [
+        "98",
+        0
+      ],
+      "resize_type.crop": "center",
+      "scale_method": "nearest-exact",
+      "input": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "画像/マスクのリサイズ"
+    }
+  },
+  "125": {
+    "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": [
+        "113",
+        0
+      ],
+      "resize_type.height": [
+        "98",
+        0
+      ],
+      "resize_type.crop": "center",
+      "scale_method": "nearest-exact",
+      "input": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "画像/マスクのリサイズ"
+    }
+  },
+  "126": {
+    "inputs": {
+      "ckpt_name": "ltx-2.3-22b-distilled-fp8.safetensors"
+    },
+    "class_type": "LTXVAudioVAELoader",
+    "_meta": {
+      "title": "LTXV オーディオVAEローダー"
+    }
+  },
+  "127": {
+    "inputs": {
+      "ckpt_name": "ltx-2.3-22b-distilled-fp8.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "チェックポイントを読み込む"
+    }
+  },
+  "128": {
+    "inputs": {
+      "text": "The camera move from a high position to a low position, keeping the character in the frame centered.\nMusic: Synthwave cyberpunk music with calm ambient synths and driving 80s beats.",
+      "clip": [
+        "103",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIPテキストエンコード（プロンプト）"
+    }
+  }
+}

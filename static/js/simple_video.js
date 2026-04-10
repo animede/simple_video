@@ -6,6 +6,36 @@
  */
 
 /* ========================================
+    Video Size Definitions per Model Family
+    ======================================== */
+
+/**
+ * LTX 2.3: dimensions must be divisible by 32, best under 720×1280.
+ * WAN 2.2 : any common resolution; standard 832×480 / 480×832 / 640×640.
+ * 'both'  : usable by either model family.
+ */
+const VIDEO_SIZE_OPTIONS = [
+    // — Landscape —
+    { value: '1280x720',  label: '横長 1280×720（HD）',           compat: 'ltx'  },
+    { value: '1216x704',  label: '横長 1216×704（LTX推奨）',      compat: 'ltx'  },
+    { value: '960x544',   label: '横長 960×544',                  compat: 'ltx'  },
+    { value: '832x480',   label: '横長 832×480（WAN標準）',       compat: 'wan'  },
+    { value: '768x512',   label: '横長 768×512',                  compat: 'ltx'  },
+    { value: '640x480',   label: '横長 640×480',                  compat: 'wan'  },
+    // — Portrait —
+    { value: '720x1280',  label: '縦長 720×1280',                 compat: 'ltx'  },
+    { value: '704x1216',  label: '縦長 704×1216（LTX推奨）',      compat: 'ltx'  },
+    { value: '544x960',   label: '縦長 544×960',                  compat: 'ltx'  },
+    { value: '480x832',   label: '縦長 480×832（WAN標準）',       compat: 'wan'  },
+    { value: '512x768',   label: '縦長 512×768',                  compat: 'ltx'  },
+    { value: '480x640',   label: '縦長 480×640',                  compat: 'wan'  },
+    // — Square —
+    { value: '704x704',   label: 'スクエア 704×704',              compat: 'ltx'  },
+    { value: '640x640',   label: 'スクエア 640×640（WAN標準）',   compat: 'wan'  },
+    { value: '512x512',   label: 'スクエア 512×512',              compat: 'both' },
+];
+
+/* ========================================
     Video Presets (Sequences)
     ======================================== */
 
@@ -456,8 +486,17 @@ function computeLTXFrames(seconds, fps) {
 function getDefaultFpsForVideoWorkflow(workflowId) {
     const wf = normalizeWorkflowAlias(workflowId);
     if (!wf) return 16;
-    if (wf.startsWith('ltx2_')) return 24;
+    if (wf.startsWith('ltx2_')) return 25;
     return 16;
+}
+
+/**
+ * Returns true if the workflow generates audio natively (LTX 2.3+).
+ * Older LTX 2.x and WAN workflows do NOT produce audio.
+ */
+function hasNativeAudioWorkflow(workflowId) {
+    const wf = normalizeWorkflowAlias(workflowId);
+    return String(wf || '').startsWith('ltx2_3_');
 }
 
 function syncFpsForCurrentOptions({ forceUI = true } = {}) {
@@ -472,7 +511,7 @@ function syncFpsForCurrentOptions({ forceUI = true } = {}) {
             SimpleVideoUI.state.fpsBackup = String(SimpleVideoUI.state.fps ?? '');
         }
         SimpleVideoUI.state.ltxFpsForced = true;
-        SimpleVideoUI.state.fps = '24';
+        SimpleVideoUI.state.fps = '25';
 
         // When switching to LTX, set appropriate size if current is auto or WAN default
         // BUT respect user's manual selection
@@ -513,6 +552,9 @@ function syncFpsForCurrentOptions({ forceUI = true } = {}) {
 
     saveSimpleVideoState();
 
+    // Always filter size dropdown to model-compatible options
+    filterVideoSizeOptions(usesLTX ? 'ltx' : 'wan');
+
     if (forceUI) {
         const fpsInput = document.getElementById('simpleVideoFps');
         if (fpsInput) {
@@ -542,6 +584,8 @@ function applyWorkflowSpeedOption(workflowId, useFast) {
 
         if (wf.startsWith('ltx2_i2v')) return i2vTarget;
         if (wf.startsWith('ltx2_t2v')) return t2vTarget;
+        // FLF → LTX 2.3 FLF
+        if (isFLFWorkflowId(wf) || wf.startsWith('ltx2_3_flf')) return 'ltx2_3_flf';
         if (isI2VWorkflowId(wf)) return i2vTarget;
         if (isT2VWorkflowId(wf)) return t2vTarget;
         if (wf.startsWith('ltx2_')) return wf;
@@ -555,9 +599,9 @@ function applyWorkflowSpeedOption(workflowId, useFast) {
 function getEffectivePresetStepsForCurrentOptions(preset) {
     const rawSteps = Array.isArray(preset?.steps) ? preset.steps : [];
     
-    // FLF presets don't support LTX fast option - they use WAN workflows
+    // FLF presets now also support LTX fast option via ltx2_3_flf
     const hasFLF = rawSteps.some(s => isFLFWorkflowId(s?.workflow)) || String(preset?.id || '').includes('flf');
-    const useFast = (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx || hasFLF) ? false : !!SimpleVideoUI.state.useFast;
+    const useFast = (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) ? false : !!SimpleVideoUI.state.useFast;
 
     const steps = [];
     for (const step of rawSteps) {
@@ -1226,6 +1270,58 @@ function normalizeCustomSize(value) {
     return { width, height };
 }
 
+/**
+ * Show/hide video-size <option> elements based on active model family.
+ * @param {'ltx'|'wan'|null} modelFamily - null = show all
+ */
+function filterVideoSizeOptions(modelFamily) {
+    const sel = document.getElementById('simpleVideoSize');
+    if (!sel) return;
+
+    const allowedCompat = modelFamily || null;   // null → show everything
+    let currentValue = sel.value;
+    let currentVisible = false;
+
+    for (const opt of sel.options) {
+        const compat = opt.dataset.compat;  // 'ltx', 'wan', 'both', or undefined (auto/custom)
+        if (!compat) {
+            // auto / custom always visible
+            opt.style.display = '';
+            opt.disabled = false;
+            if (opt.value === currentValue) currentVisible = true;
+            continue;
+        }
+        const show = !allowedCompat || compat === 'both' || compat === allowedCompat;
+        opt.style.display = show ? '' : 'none';
+        opt.disabled = !show;
+        if (show && opt.value === currentValue) currentVisible = true;
+    }
+
+    // If the currently selected value is now hidden, auto-select a sensible default
+    if (!currentVisible && currentValue !== 'auto' && currentValue !== 'custom') {
+        const defaults = {
+            ltx: '1280x720',
+            wan: '640x640',
+        };
+        const fallback = defaults[allowedCompat] || 'auto';
+        sel.value = fallback;
+        SimpleVideoUI.state.videoSize = fallback;
+        console.log(`[SimpleVideo] Size "${currentValue}" not available for ${allowedCompat}; switched to ${fallback}`);
+    }
+
+    // Update hint text
+    const hint = document.getElementById('simpleVideoSizeHint');
+    if (hint) {
+        if (allowedCompat === 'ltx') {
+            hint.textContent = 'LTX 2.3: 32の倍数のみ。推奨 1280×720 / 1216×704。';
+        } else if (allowedCompat === 'wan') {
+            hint.textContent = 'WAN: 推奨 640×640 / 832×480 / 480×832。';
+        } else {
+            hint.textContent = 'サイズはワークフローに合わせて選択してください。';
+        }
+    }
+}
+
 function normalizeFps(value) {
     if (value === null || value === undefined || value === '') return '';
     const raw = Number(value);
@@ -1559,7 +1655,7 @@ function renderSimpleVideoUI() {
             <div class="simple-video-character-analysis" id="simpleVideoKeyImageAnalysis" style="display:none;">
                 <div class="simple-video-character-analysis-status" id="simpleVideoKeyImageAnalysisStatus"></div>
                 <div class="simple-video-character-analysis-result" id="simpleVideoKeyImageAnalysisResult">
-                    <div class="simple-video-character-analysis-text" id="simpleVideoKeyImageAnalysisText"></div>
+                    <textarea class="simple-video-character-analysis-text" id="simpleVideoKeyImageAnalysisText" rows="4"></textarea>
                 </div>
                 <div class="simple-video-character-analysis-options">
                     <label class="simple-video-checkbox-label">
@@ -1876,7 +1972,7 @@ function renderSimpleVideoUI() {
                     </label>
                     <label class="simple-video-sequence-flag" title="（現状は音声対応ワークフローが必要です）">
                         <input type="checkbox" id="simpleVideoOptAudio" />
-                        <span>音声も生成</span>
+                        <span id="simpleVideoOptAudioLabel">音声も生成</span>
                     </label>
                 </div>
             </div>
@@ -2001,17 +2097,8 @@ function renderSimpleVideoUI() {
                         <span>サイズ</span>
                         <select class="simple-video-select" id="simpleVideoSize">
                             <option value="auto" selected>(auto)</option>
-                            <option value="1920x1080">横長 1920×1080（高精細）</option>
-                            <option value="1280x720">横長 1280×720（HD）</option>
-                            <option value="832x480">横長 832×480（WAN標準）</option>
-                            <option value="640x480">横長 640×480</option>
-                            <option value="1080x1920">縦長 1080×1920</option>
-                            <option value="720x1280">縦長 720×1280</option>
-                            <option value="480x832">縦長 480×832（WAN標準）</option>
-                            <option value="480x640">縦長 480×640</option>
-                            <option value="1024x1024">スクエア 1024×1024</option>
-                            <option value="640x640">スクエア 640×640（WAN標準）</option>
-                            <option value="512x512">スクエア 512×512</option>
+                            ${VIDEO_SIZE_OPTIONS.map(o => `<option value="${o.value}" data-compat="${o.compat}">${o.label}</option>`).join('\n                            ')}
+                            <option value="custom">カスタム</option>
                         </select>
                     </label>
                     <label class="simple-video-field">
@@ -2026,7 +2113,7 @@ function renderSimpleVideoUI() {
                         </select>
                     </label>
                 </div>
-                <div class="simple-video-hint">サイズはワークフローに合わせて選択してください。推奨は640x640です。</div>
+                <div class="simple-video-hint" id="simpleVideoSizeHint">サイズはワークフローに合わせて選択してください。推奨は640x640です。</div>
 
                 <div class="simple-video-form-row" id="simpleVideoI2ISettingsRow" style="display:none; margin-top:10px;">
                     <label class="simple-video-field simple-video-field-wide">
@@ -3103,6 +3190,16 @@ function attachSimpleVideoEventListeners() {
         await runKeyImageAnalysis();
     });
 
+    // Key image analysis text editing
+    const keyImageAnalysisText = document.getElementById('simpleVideoKeyImageAnalysisText');
+    keyImageAnalysisText?.addEventListener('input', (e) => {
+        SimpleVideoUI.state.keyImageAnalysis = e.target.value;
+        if (SimpleVideoUI.state.keyImageAnalysisRaw) {
+            SimpleVideoUI.state.keyImageAnalysisRaw.prompt = e.target.value;
+        }
+        saveSimpleVideoState();
+    });
+
     // Reference source selection for char_edit_i2i_flf
     const refSourceSelect = document.getElementById('simpleVideoRefSource');
     if (refSourceSelect) {
@@ -4021,7 +4118,9 @@ function pickPromptOutputTypeForPreset(preset) {
 }
 
 function pickTargetWorkflowForPromptGeneration(preset) {
-    const steps = Array.isArray(preset?.steps) ? preset.steps : [];
+    // Use effective steps (with useFast/LTX applied) so that LTX-2.3
+    // system_role is selected when the user has enabled the fast option.
+    const steps = getEffectivePresetStepsForCurrentOptions(preset);
     const normalized = steps
         .map((s) => normalizeWorkflowAlias(s?.workflow))
         .filter(Boolean);
@@ -6235,7 +6334,8 @@ async function regenerateSingleSceneVideo(index) {
         if (preset.mixedTransitions) {
             // Mixed pipeline: per-boundary FLF or I2V based on transition type
             const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
             const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
             const fpsRaw = Number(state.fps);
 
@@ -6277,6 +6377,9 @@ async function regenerateSingleSceneVideo(index) {
                     };
                     if (Number.isFinite(frames) && frames > 0) params.frames = frames;
                     if (width && height) { params.width = width; params.height = height; }
+                    if (String(flfWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
 
                     const res = await runWorkflowStep({
                         workflow: flfWorkflow,
@@ -6339,7 +6442,10 @@ async function regenerateSingleSceneVideo(index) {
                 });
             }
         } else if (hasFLF) {
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
+            const i2vWorkflowForRegen = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
+            const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
             const fpsRaw = Number(state.fps);
             const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
             const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
@@ -6354,46 +6460,96 @@ async function regenerateSingleSceneVideo(index) {
 
             let lastRes = null;
             for (const segIdx of segmentIndexes) {
-                const start = images[segIdx];
-                const end = images[segIdx + 1];
-                if (!start || !String(start.filename || '').trim() || !end || !String(end.filename || '').trim()) {
-                    throw new Error(`FLF再生成に必要な画像が不足しています（#${segIdx + 1}→#${segIdx + 2}）`);
+                // Check user-override: transitions[segIdx+1] tells how scene segIdx+1 connects FROM scene segIdx.
+                // Default to 'flf' for flfOnly presets when no user override exists.
+                const transType = String(transitions[segIdx + 1] || (preset.flfOnly ? 'flf' : '')).toLowerCase();
+                const useFLFForSeg = (transType === 'flf');
+
+                if (useFLFForSeg) {
+                    // --- FLF path ---
+                    const start = images[segIdx];
+                    const end = images[segIdx + 1];
+                    if (!start || !String(start.filename || '').trim() || !end || !String(end.filename || '').trim()) {
+                        throw new Error(`FLF再生成に必要な画像が不足しています（#${segIdx + 1}→#${segIdx + 2}）`);
+                    }
+
+                    const basePrompt = String(scenePrompts[segIdx] || '').trim();
+                    const endPrompt = String(scenePrompts[segIdx + 1] || '').trim();
+                    const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
+
+                    const params = {
+                        prompt: flfPrompt,
+                        input_image_start: String(start.filename),
+                        input_image_end: String(end.filename),
+                        fps: effectiveFps,
+                    };
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
+                    if (String(flfWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
+
+                    const res = await runWorkflowStep({
+                        workflow: flfWorkflow,
+                        label: `S${segIdx + 1}→S${segIdx + 2} FLF再生成`,
+                        requestParams: params,
+                        stepIndex: segmentIndexes.indexOf(segIdx),
+                        totalSteps: segmentIndexes.length,
+                    });
+                    lastRes = res;
+
+                    const videoOut = pickBestOutput(res.outputs, 'video');
+                    const videoBase = videoOut?.filename ? String(videoOut.filename).split('/').pop() : '';
+                    if (!videoBase) throw new Error(`FLF再生成動画が取得できません（#${segIdx + 1}→#${segIdx + 2}）`);
+
+                    setSceneVideoBasenameAtIndex({
+                        presetId: preset.id,
+                        index: segIdx,
+                        basename: videoBase,
+                    });
+                } else {
+                    // --- I2V fallback path: user changed transition from FLF ---
+                    const sceneImage = images[segIdx];
+                    if (!sceneImage || !String(sceneImage.filename || '').trim()) {
+                        throw new Error(`I2V再生成に必要な画像がありません（#${segIdx + 1}）`);
+                    }
+
+                    const params = {
+                        prompt: String(scenePrompts[segIdx] || '').trim(),
+                        input_image: String(sceneImage.filename),
+                        fps: effectiveFps,
+                    };
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
+                    if (String(i2vWorkflowForRegen || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
+
+                    const res = await runWorkflowStep({
+                        workflow: i2vWorkflowForRegen,
+                        label: `S${segIdx + 1} I2V再生成 [${transType}]`,
+                        requestParams: params,
+                        stepIndex: segmentIndexes.indexOf(segIdx),
+                        totalSteps: segmentIndexes.length,
+                    });
+                    lastRes = res;
+
+                    const videoOut = pickBestOutput(res.outputs, 'video');
+                    const videoBase = videoOut?.filename ? String(videoOut.filename).split('/').pop() : '';
+                    if (!videoBase) throw new Error(`I2V再生成動画が取得できません（#${segIdx + 1}）`);
+
+                    setSceneVideoBasenameAtIndex({
+                        presetId: preset.id,
+                        index: segIdx,
+                        basename: videoBase,
+                    });
                 }
-
-                const basePrompt = String(scenePrompts[segIdx] || '').trim();
-                const endPrompt = String(scenePrompts[segIdx + 1] || '').trim();
-                const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
-
-                const params = {
-                    prompt: flfPrompt,
-                    input_image_start: String(start.filename),
-                    input_image_end: String(end.filename),
-                    fps: effectiveFps,
-                };
-                if (Number.isFinite(frames) && frames > 0) params.frames = frames;
-                if (width && height) {
-                    params.width = width;
-                    params.height = height;
-                }
-
-                const res = await runWorkflowStep({
-                    workflow: flfWorkflow,
-                    label: `S${segIdx + 1}→S${segIdx + 2} FLF再生成`,
-                    requestParams: params,
-                    stepIndex: segmentIndexes.indexOf(segIdx),
-                    totalSteps: segmentIndexes.length,
-                });
-                lastRes = res;
-
-                const videoOut = pickBestOutput(res.outputs, 'video');
-                const videoBase = videoOut?.filename ? String(videoOut.filename).split('/').pop() : '';
-                if (!videoBase) throw new Error(`FLF再生成動画が取得できません（#${segIdx + 1}→#${segIdx + 2}）`);
-
-                setSceneVideoBasenameAtIndex({
-                    presetId: preset.id,
-                    index: segIdx,
-                    basename: videoBase,
-                });
             }
 
             if (lastRes) {
@@ -6980,11 +7136,9 @@ function selectPreset(presetId) {
         if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
             fast.closest('.simple-video-sequence-flag').style.display = 'none';
             fast.disabled = true;
-        } else if (hasFLF) {
-            fast.closest('.simple-video-sequence-flag').style.display = 'none';
         } else {
             fast.closest('.simple-video-sequence-flag').style.display = '';
-            const shouldDisable = !hasVideo;
+            const shouldDisable = !hasVideo && !hasFLF;
             fast.disabled = shouldDisable;
             fast.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
         }
@@ -6994,18 +7148,27 @@ function selectPreset(presetId) {
         if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
             ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
             ltxVariant.disabled = true;
-        } else if (hasFLF) {
-            ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
         } else {
             ltxVariant.closest('.simple-video-sequence-flag').style.display = '';
-            const shouldDisable = !hasVideo || !SimpleVideoUI.state.useFast;
+            const shouldDisable = (!hasVideo && !hasFLF) || !SimpleVideoUI.state.useFast;
             ltxVariant.disabled = shouldDisable;
             ltxVariant.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
         }
     }
     
     if (audio) {
-        if (!SIMPLE_VIDEO_STANDALONE_CONFIG.showGenerateAudioOption) {
+        const effectiveSteps = getEffectivePresetStepsForCurrentOptions(preset);
+        const usesLTX23 = effectiveSteps.some(s => hasNativeAudioWorkflow(s?.workflow));
+        const audioLabel = document.getElementById('simpleVideoOptAudioLabel');
+
+        if (usesLTX23) {
+            // LTX 2.3 generates audio natively — show toggle to let user choose
+            audio.closest('.simple-video-sequence-flag').style.display = '';
+            audio.disabled = false;
+            audio.closest('.simple-video-sequence-flag')?.classList.remove('disabled');
+            audio.closest('.simple-video-sequence-flag').title = 'LTX 2.3のネイティブ音声を動画に含めます';
+            if (audioLabel) audioLabel.textContent = 'LTX音声を含める';
+        } else if (!SIMPLE_VIDEO_STANDALONE_CONFIG.showGenerateAudioOption) {
             audio.closest('.simple-video-sequence-flag').style.display = 'none';
             audio.disabled = true;
         } else if (hasFLF) {
@@ -7014,6 +7177,8 @@ function selectPreset(presetId) {
             audio.closest('.simple-video-sequence-flag').style.display = '';
             audio.disabled = false;
             audio.closest('.simple-video-sequence-flag')?.classList.remove('disabled');
+            audio.closest('.simple-video-sequence-flag').title = '（現状は音声対応ワークフローが必要です）';
+            if (audioLabel) audioLabel.textContent = '音声も生成';
         }
     }
     
@@ -7431,11 +7596,9 @@ function updateSimpleVideoUI() {
             if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
                 fast.closest('.simple-video-sequence-flag').style.display = 'none';
                 fast.disabled = true;
-            } else if (hasFLF) {
-                fast.closest('.simple-video-sequence-flag').style.display = 'none';
             } else {
                 fast.closest('.simple-video-sequence-flag').style.display = '';
-                const shouldDisable = !hasVideo;
+                const shouldDisable = !hasVideo && !hasFLF;
                 fast.disabled = shouldDisable;
                 fast.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
             }
@@ -7445,18 +7608,26 @@ function updateSimpleVideoUI() {
             if (!SIMPLE_VIDEO_STANDALONE_CONFIG.enableLtx) {
                 ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
                 ltxVariant.disabled = true;
-            } else if (hasFLF) {
-                ltxVariant.closest('.simple-video-sequence-flag').style.display = 'none';
             } else {
                 ltxVariant.closest('.simple-video-sequence-flag').style.display = '';
-                const shouldDisable = !hasVideo || !state.useFast;
+                const shouldDisable = (!hasVideo && !hasFLF) || !state.useFast;
                 ltxVariant.disabled = shouldDisable;
                 ltxVariant.closest('.simple-video-sequence-flag')?.classList.toggle('disabled', shouldDisable);
             }
         }
 
         if (audio) {
-            if (!SIMPLE_VIDEO_STANDALONE_CONFIG.showGenerateAudioOption) {
+            const effectiveSteps = getEffectivePresetStepsForCurrentOptions(preset);
+            const usesLTX23 = effectiveSteps.some(s => hasNativeAudioWorkflow(s?.workflow));
+            const audioLabel = document.getElementById('simpleVideoOptAudioLabel');
+
+            if (usesLTX23) {
+                audio.closest('.simple-video-sequence-flag').style.display = '';
+                audio.disabled = false;
+                audio.closest('.simple-video-sequence-flag')?.classList.remove('disabled');
+                audio.closest('.simple-video-sequence-flag').title = 'LTX 2.3のネイティブ音声を動画に含めます';
+                if (audioLabel) audioLabel.textContent = 'LTX音声を含める';
+            } else if (!SIMPLE_VIDEO_STANDALONE_CONFIG.showGenerateAudioOption) {
                 audio.closest('.simple-video-sequence-flag').style.display = 'none';
                 audio.disabled = true;
             } else if (hasFLF) {
@@ -7465,6 +7636,8 @@ function updateSimpleVideoUI() {
                 audio.closest('.simple-video-sequence-flag').style.display = '';
                 audio.disabled = false;
                 audio.closest('.simple-video-sequence-flag')?.classList.remove('disabled');
+                audio.closest('.simple-video-sequence-flag').title = '（現状は音声対応ワークフローが必要です）';
+                if (audioLabel) audioLabel.textContent = '音声も生成';
             }
         }
     } else {
@@ -7965,7 +8138,7 @@ function updateKeyImageAnalysisUI() {
         
         if (hasAnalysis) {
             const textEl = document.getElementById('simpleVideoKeyImageAnalysisText');
-            if (textEl) textEl.textContent = state.keyImageAnalysis || '';
+            if (textEl) textEl.value = state.keyImageAnalysis || '';
         }
     }
 }
@@ -8081,7 +8254,7 @@ async function runKeyImageAnalysis() {
     }
     if (resultEl) resultEl.style.display = 'none';
     if (optionsWrap) optionsWrap.style.display = 'none';
-    if (textEl) textEl.textContent = '';
+    if (textEl) textEl.value = '';
     
     try {
         // Get image URL
@@ -8142,7 +8315,7 @@ async function runKeyImageAnalysis() {
         };
         saveSimpleVideoState();
         
-        if (textEl) textEl.textContent = parsed.prompt || result.description || '';
+        if (textEl) textEl.value = parsed.prompt || result.description || '';
         if (resultEl) resultEl.style.display = '';
         if (optionsWrap) optionsWrap.style.display = '';
         if (statusEl) statusEl.textContent = `✅ 解析完了 (${result.elapsed_time}秒)`;
@@ -9173,18 +9346,18 @@ function buildM2VPromptFromSpec(spec) {
             lines.push(`#${idx + 1}${ds}: ${beat}`);
         });
     }
-    lines.push('Hard continuity constraints (must hold across ALL scenes):');
+    lines.push('Identity anchors (re-state these details in EVERY scene prompt independently):');
     if (hasJapanAnchor) {
-        lines.push('- Keep the location in Japan (do not change to Europe/US or other countries).');
+        lines.push('- Location is Japan — re-describe Japanese setting details in each prompt.');
     }
     if (hasJapanesePersonAnchor) {
-        lines.push('- Keep the main character as Japanese (do not change ethnicity/nationality).');
+        lines.push('- Main character is Japanese — re-describe their appearance in each prompt.');
     }
     if (hasJapanAnchor || hasJapanesePersonAnchor) {
         lines.push('- Do not westernize names, streets, architecture, extras, or cultural context unless explicitly requested.');
     }
     lines.push('Generate scene prompts that align each scene content with its target duration.');
-    lines.push('Keep continuity and avoid abrupt style changes between scenes.');
+    lines.push('Each prompt must be fully self-contained — re-state all character/setting details; never reference other scenes.');
     return lines.join('\n');
 }
 
@@ -9202,12 +9375,12 @@ function buildM2VFallbackPromptOverride({ lyricsText, sceneDurationsSec, targetD
     if (durations.length > 0) lines.push(`Scene durations (seconds): ${durations.join(', ')}`);
     if (Number.isFinite(targetSec) && targetSec > 0) lines.push(`Target duration (seconds): ${Math.round(targetSec)}`);
     if (lyrics) {
-        lines.push('Lyrics anchor (use as visual continuity source):');
+        lines.push('Lyrics anchor (use as visual inspiration source):');
         lines.push(lyrics.slice(0, 2400));
     } else {
-        lines.push('No lyrics are available. Build a coherent cinematic progression from the audio mood.');
+        lines.push('No lyrics are available. Build a cinematic progression inspired by the audio mood.');
     }
-    lines.push('Generate scene prompts aligned with each scene duration, preserving coherent narrative and visual continuity.');
+    lines.push('Generate self-contained scene prompts aligned with each scene duration. Re-state character/setting details in every prompt; never reference other scenes.');
     return lines.join('\n');
 }
 
@@ -9412,6 +9585,9 @@ async function startSimpleVideoMusicToVideo() {
     saveSimpleVideoState();
     updateGenerateButtonState();
 
+    // Track original generateAudio value; M2V always forces it OFF (restored in finally)
+    let m2vPrevGenerateAudio = !!state.generateAudio;
+
     try {
         let audioDuration = Number(audioSource.durationSec);
         if (!Number.isFinite(audioDuration) || audioDuration <= 0) {
@@ -9482,6 +9658,12 @@ async function startSimpleVideoMusicToVideo() {
             throw new Error('動画シナリオが未入力で、M2V仕様の生成にも失敗したため続行できません。動画シナリオを入力してください');
         }
 
+        // M2V: force generateAudio OFF so LTX-2.3 prompt generation
+        // focuses on visual detail (audio comes from ACE-Step, not LTX).
+        m2vPrevGenerateAudio = !!state.generateAudio;
+        state.generateAudio = false;
+        saveSimpleVideoState();
+
         setSimpleVideoProgressVisible(true);
         setSimpleVideoProgress(`🎬 M2V: 動画生成を開始（音源 ${formatSimpleVideoDuration(audioDuration)} / ${currentSceneCount}シーン）`, 0.02);
 
@@ -9551,6 +9733,8 @@ async function startSimpleVideoMusicToVideo() {
         simpleVideoM2VPromptOverride = null;
         simpleVideoForcePromptRegeneration = false;
         state.m2vIsRunning = false;
+        // Restore generateAudio to pre-M2V value
+        state.generateAudio = m2vPrevGenerateAudio;
         saveSimpleVideoState();
         updateGenerateButtonState();
     }
@@ -11171,6 +11355,9 @@ async function generateScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeqA
     };
     if (targetWorkflow) requestBody.target_workflow = targetWorkflow;
     if (flfMotionLevel) requestBody.flf_motion_level = flfMotionLevel;
+    // Pass generate_audio flag so LTX-2.3 prompt generation can adapt
+    // (include audio descriptions only when audio generation is active)
+    requestBody.generate_audio = !!state.generateAudio;
 
     let jobId = null;
     try {
@@ -12772,7 +12959,7 @@ function getXfadeConcatParams() {
 }
 
 /**
- * Build per-boundary xfade parameters from sceneTransitions (mixed pipeline).
+ * Build per-boundary xfade parameters from sceneTransitions (mixed / flfOnly pipeline).
  * Maps transition types to ffmpeg xfade effect names.
  * Falls back to getXfadeConcatParams() when sceneTransitions is not available.
  */
@@ -12782,7 +12969,7 @@ function getPerBoundaryXfadeParams() {
     if (!transitions || transitions.length < 2) return getXfadeConcatParams();
 
     const preset = VIDEO_PRESETS.find(p => p.id === state.selectedPreset);
-    if (!preset?.mixedTransitions) return getXfadeConcatParams();
+    if (!preset?.mixedTransitions && !preset?.flfOnly) return getXfadeConcatParams();
 
     // Map transition types to ffmpeg xfade effect names
     // transitions[i] describes how scene i transitions FROM the previous scene
@@ -12947,7 +13134,8 @@ async function startGeneration() {
         }
     }
 
-    // Note: LTX workflows default to stripping audio unless strip_audio=false is passed.
+    // Note: LTX workflows (including 2.3) strip audio unless generateAudio toggle is ON.
+    // The "LTX音声を含める" toggle is shown in the UI when LTX 2.3 workflows are active.
 
     state.isGenerating = true;
     state.currentStep = 0;
@@ -13041,7 +13229,14 @@ async function startGeneration() {
             }
 
             // FLF品質設定: speed=4-step(高速), quality=20-step(高品質)
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
+
+            // I2V fallback workflow (used when user overrides a transition type from FLF)
+            const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
+
+            // Transition array from LLM / user edits (FLF-only defaults to all-FLF)
+            const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
 
             const hasPreparedForThisPreset = !!(
                 state.preparedVideoInitialImage?.filename
@@ -13115,7 +13310,14 @@ async function startGeneration() {
                     params.height = height;
                 }
 
-                params.prompt = scenePrompt;
+                // Convert video/FLF-style prompt into a still-image prompt
+                // to prevent camera/motion instructions from causing tile artifacts in I2I.
+                const stillPrompt = await generateImagePromptForSceneRefine({
+                    scenePrompt,
+                    preset,
+                    cancelSeqAtStart,
+                });
+                params.prompt = stillPrompt || scenePrompt;
                 params.prompt = prependNoCharacterCloneGuard(params.prompt);
                 params.prompt = prependSingleSceneGuard(params.prompt);
                 params.input_image = referenceImageFilename;
@@ -13188,7 +13390,7 @@ async function startGeneration() {
                 }
             }
 
-            // (B) Generate FLF videos between adjacent scene images
+            // (B) Generate FLF (or I2V fallback) videos between adjacent scene images
             const fpsRaw = Number(state.fps);
             const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
             const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
@@ -13199,50 +13401,106 @@ async function startGeneration() {
                 state.currentStep = stepCursor + 1;
                 saveSimpleVideoState();
 
-                const startImage = String(sceneImages[i]);
-                const endImage = String(sceneImages[i + 1]);
-                // Use sceneImagePrompts which is synchronized with sceneImages
-                const basePrompt = String(sceneImagePrompts[i] || '').trim();
-                const endPrompt = String(sceneImagePrompts[i + 1] || '').trim();
-                const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
+                // Check user-override: transitions[i+1] tells how scene i+1 connects FROM scene i.
+                // Default to 'flf' for flfOnly presets when no user override exists.
+                const transType = String(transitions[i + 1] || 'flf').toLowerCase();
+                const useFLF = (transType === 'flf');
 
-                const params = {
-                    prompt: flfPrompt,
-                    input_image_start: startImage,
-                    input_image_end: endImage,
-                };
-                if (width && height) {
-                    params.width = width;
-                    params.height = height;
-                }
+                if (useFLF) {
+                    // --- FLF path (default for this preset) ---
+                    const startImage = String(sceneImages[i]);
+                    const endImage = String(sceneImages[i + 1]);
+                    // Use sceneImagePrompts which is synchronized with sceneImages
+                    const basePrompt = String(sceneImagePrompts[i] || '').trim();
+                    const endPrompt = String(sceneImagePrompts[i + 1] || '').trim();
+                    const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
 
-                // FLF workflows are video workflows
-                params.fps = effectiveFps;
-                const frames = getSceneFramesForIndex(i, effectiveFps);
-                if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    const params = {
+                        prompt: flfPrompt,
+                        input_image_start: startImage,
+                        input_image_end: endImage,
+                    };
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
 
-                const label = `S${i + 1}→S${i + 2}/${sceneImages.length} FLF遷移`;
-                const res = await runWorkflowStep({
-                    workflow: flfWorkflow,
-                    label,
-                    requestParams: params,
-                    stepIndex: stepCursor,
-                    totalSteps,
-                });
-                stepCursor++;
+                    // FLF workflows are video workflows
+                    params.fps = effectiveFps;
+                    const frames = getSceneFramesForIndex(i, effectiveFps);
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (String(flfWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
 
-                renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `FLF ${i + 1}/${sceneImages.length - 1}` });
+                    const label = `S${i + 1}→S${i + 2}/${sceneImages.length} FLF遷移`;
+                    const res = await runWorkflowStep({
+                        workflow: flfWorkflow,
+                        label,
+                        requestParams: params,
+                        stepIndex: stepCursor,
+                        totalSteps,
+                    });
+                    stepCursor++;
 
-                const vid = pickBestOutput(res.outputs, 'video');
-                if (vid?.filename) {
-                    const base = String(vid.filename).split('/').pop();
-                    if (base) sceneVideoBasenames.push(base);
+                    renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `FLF ${i + 1}/${sceneImages.length - 1}` });
+
+                    const vid = pickBestOutput(res.outputs, 'video');
+                    if (vid?.filename) {
+                        const base = String(vid.filename).split('/').pop();
+                        if (base) {
+                            sceneVideoBasenames.push(base);
+                            setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                        }
+                    } else {
+                        throw new Error(`FLF ${i + 1} の出力動画が見つかりませんでした`);
+                    }
                 } else {
-                    throw new Error(`FLF ${i + 1} の出力動画が見つかりませんでした`);
+                    // --- I2V fallback path: user changed transition from FLF ---
+                    const sceneImage = String(sceneImages[i]);
+                    const scenePrompt = String(sceneImagePrompts[i] || '').trim();
+
+                    const params = {
+                        prompt: scenePrompt,
+                        input_image: sceneImage,
+                    };
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
+                    params.fps = effectiveFps;
+                    const frames = getSceneFramesForIndex(i, effectiveFps);
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
+
+                    const label = `S${i + 1}/${sceneImages.length} シーン動画(I2V) [${transType}]`;
+                    const res = await runWorkflowStep({
+                        workflow: i2vWorkflow,
+                        label,
+                        requestParams: params,
+                        stepIndex: stepCursor,
+                        totalSteps,
+                    });
+                    stepCursor++;
+
+                    renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `I2V #${i + 1} [${transType}]` });
+
+                    const vid = pickBestOutput(res.outputs, 'video');
+                    if (vid?.filename) {
+                        const base = String(vid.filename).split('/').pop();
+                        if (base) {
+                            sceneVideoBasenames.push(base);
+                            setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                        }
+                    } else {
+                        throw new Error(`シーン${i + 1}のI2V出力動画が見つかりませんでした`);
+                    }
                 }
             }
 
-            // (C) [Removed] I2V is no longer used for char_i2i_flf; all transitions are FLF.
+            // (C) I2V fallback is now inline above; FLF remains the default for this preset.
 
             // (D) Concat stage
             const concatStepIndex = Math.max(0, stepCursor);
@@ -13338,7 +13596,14 @@ async function startGeneration() {
             }
 
             // FLF品質設定: speed=4-step(高速), quality=20-step(高品質)
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
+
+            // I2V fallback workflow (used when user overrides a transition type from FLF)
+            const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
+
+            // Transition array from LLM / user edits (FLF-only defaults to all-FLF)
+            const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
 
             const desiredMidCount = Math.max(1, sceneCount);
             const scenarioFP = computeScenarioFingerprint(state.scenario, scenePrompts);
@@ -13415,7 +13680,14 @@ async function startGeneration() {
                     params.height = height;
                 }
 
-                params.prompt = scenePrompt;
+                // Convert video/FLF-style prompt into a still-image prompt
+                // to prevent camera/motion instructions from causing tile artifacts in I2I.
+                const stillPrompt = await generateImagePromptForSceneRefine({
+                    scenePrompt,
+                    preset,
+                    cancelSeqAtStart,
+                });
+                params.prompt = stillPrompt || scenePrompt;
                 params.prompt = prependNoCharacterCloneGuard(params.prompt);
                 params.prompt = prependSingleSceneGuard(params.prompt);
                 params.input_image = refForThisScene;
@@ -13499,7 +13771,7 @@ async function startGeneration() {
                 }
             }
 
-            // (B) Generate FLF videos between adjacent scene images
+            // (B) Generate FLF (or I2V fallback) videos between adjacent scene images
             const fpsRaw = Number(state.fps);
             const fallbackFps = getDefaultFpsForVideoWorkflow(flfWorkflow);
             const effectiveFps = (Number.isFinite(fpsRaw) && fpsRaw > 0) ? Math.round(fpsRaw) : fallbackFps;
@@ -13510,49 +13782,105 @@ async function startGeneration() {
                 state.currentStep = stepCursor + 1;
                 saveSimpleVideoState();
 
-                const startImage = String(sceneImages[i]);
-                const endImage = String(sceneImages[i + 1]);
-                // Use sceneImagePrompts which is synchronized with sceneImages
-                const basePrompt = String(sceneImagePrompts[i] || '').trim();
-                const endPrompt = String(sceneImagePrompts[i + 1] || '').trim();
-                const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
+                // Check user-override: transitions[i+1] tells how scene i+1 connects FROM scene i.
+                // Default to 'flf' for flfOnly presets when no user override exists.
+                const transType = String(transitions[i + 1] || 'flf').toLowerCase();
+                const useFLF = (transType === 'flf');
 
-                const params = {
-                    prompt: flfPrompt,
-                    input_image_start: startImage,
-                    input_image_end: endImage,
-                };
-                if (width && height) {
-                    params.width = width;
-                    params.height = height;
-                }
+                if (useFLF) {
+                    // --- FLF path (default for this preset) ---
+                    const startImage = String(sceneImages[i]);
+                    const endImage = String(sceneImages[i + 1]);
+                    // Use sceneImagePrompts which is synchronized with sceneImages
+                    const basePrompt = String(sceneImagePrompts[i] || '').trim();
+                    const endPrompt = String(sceneImagePrompts[i + 1] || '').trim();
+                    const flfPrompt = composeFLFPromptWithEndIntent(basePrompt, endPrompt, state.flfEndConstraintEnabled !== false);
 
-                params.fps = effectiveFps;
-                const frames = getSceneFramesForIndex(i, effectiveFps);
-                if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    const params = {
+                        prompt: flfPrompt,
+                        input_image_start: startImage,
+                        input_image_end: endImage,
+                    };
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
 
-                const label = `S${i + 1}→S${i + 2}/${sceneCount} FLF遷移`;
-                const res = await runWorkflowStep({
-                    workflow: flfWorkflow,
-                    label,
-                    requestParams: params,
-                    stepIndex: stepCursor,
-                    totalSteps,
-                });
-                stepCursor++;
+                    params.fps = effectiveFps;
+                    const frames = getSceneFramesForIndex(i, effectiveFps);
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (String(flfWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
 
-                renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `FLF ${i + 1}/${sceneImages.length - 1}` });
+                    const label = `S${i + 1}→S${i + 2}/${sceneCount} FLF遷移`;
+                    const res = await runWorkflowStep({
+                        workflow: flfWorkflow,
+                        label,
+                        requestParams: params,
+                        stepIndex: stepCursor,
+                        totalSteps,
+                    });
+                    stepCursor++;
 
-                const vid = pickBestOutput(res.outputs, 'video');
-                if (vid?.filename) {
-                    const base = String(vid.filename).split('/').pop();
-                    if (base) sceneVideoBasenames.push(base);
+                    renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `FLF ${i + 1}/${sceneImages.length - 1}` });
+
+                    const vid = pickBestOutput(res.outputs, 'video');
+                    if (vid?.filename) {
+                        const base = String(vid.filename).split('/').pop();
+                        if (base) {
+                            sceneVideoBasenames.push(base);
+                            setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                        }
+                    } else {
+                        throw new Error(`FLF ${i + 1} の出力動画が見つかりませんでした`);
+                    }
                 } else {
-                    throw new Error(`FLF ${i + 1} の出力動画が見つかりませんでした`);
+                    // --- I2V fallback path: user changed transition from FLF ---
+                    const sceneImage = String(sceneImages[i]);
+                    const scenePrompt = String(sceneImagePrompts[i] || '').trim();
+
+                    const params = {
+                        prompt: scenePrompt,
+                        input_image: sceneImage,
+                    };
+                    if (width && height) {
+                        params.width = width;
+                        params.height = height;
+                    }
+                    params.fps = effectiveFps;
+                    const frames = getSceneFramesForIndex(i, effectiveFps);
+                    if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (String(i2vWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
+
+                    const label = `S${i + 1}/${sceneImages.length} シーン動画(I2V) [${transType}]`;
+                    const res = await runWorkflowStep({
+                        workflow: i2vWorkflow,
+                        label,
+                        requestParams: params,
+                        stepIndex: stepCursor,
+                        totalSteps,
+                    });
+                    stepCursor++;
+
+                    renderSimpleVideoOutputMedia({ jobId: res.jobId, outputs: res.outputs, title: `I2V #${i + 1} [${transType}]` });
+
+                    const vid = pickBestOutput(res.outputs, 'video');
+                    if (vid?.filename) {
+                        const base = String(vid.filename).split('/').pop();
+                        if (base) {
+                            sceneVideoBasenames.push(base);
+                            setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                        }
+                    } else {
+                        throw new Error(`シーン${i + 1}のI2V出力動画が見つかりませんでした`);
+                    }
                 }
             }
 
-            // (C) [Removed] I2V is no longer used for char_edit_i2i_flf; all transitions are FLF.
+            // (C) I2V fallback is now inline above; FLF remains the default for this preset.
 
             // (D) Concat stage
             const concatStepIndex = Math.max(0, stepCursor);
@@ -13851,7 +14179,10 @@ async function startGeneration() {
                 const vid = pickBestOutput(res.outputs, 'video');
                 if (vid?.filename) {
                     const base = String(vid.filename).split('/').pop();
-                    if (base) sceneVideoBasenames.push(base);
+                    if (base) {
+                        sceneVideoBasenames.push(base);
+                        setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                    }
                 } else {
                     throw new Error(`シーン${i + 1}のI2V出力動画が見つかりませんでした`);
                 }
@@ -13955,7 +14286,8 @@ async function startGeneration() {
 
             // I2V and FLF workflows
             const i2vWorkflow = applyWorkflowSpeedOption('wan22_i2v_lightning', !!state.useFast);
-            const flfWorkflow = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflowBase = state.flfQuality === 'quality' ? 'wan22_flf2v' : 'wan22_smooth_first2last';
+            const flfWorkflow = applyWorkflowSpeedOption(flfWorkflowBase, !!state.useFast);
 
             // Transition array from LLM (index 0 = first scene, always 'none')
             const transitions = Array.isArray(state.sceneTransitions) ? state.sceneTransitions : [];
@@ -14156,6 +14488,9 @@ async function startGeneration() {
                     params.fps = effectiveFps;
                     const frames = getSceneFramesForIndex(i, effectiveFps);
                     if (Number.isFinite(frames) && frames > 0) params.frames = frames;
+                    if (String(flfWorkflow || '').startsWith('ltx2_')) {
+                        params.strip_audio = !state.generateAudio;
+                    }
 
                     const label = `S${i + 1}→S${i + 2}/${sceneCount} FLF遷移`;
                     const res = await runWorkflowStep({
@@ -14172,7 +14507,10 @@ async function startGeneration() {
                     const vid = pickBestOutput(res.outputs, 'video');
                     if (vid?.filename) {
                         const base = String(vid.filename).split('/').pop();
-                        if (base) sceneVideoBasenames.push(base);
+                        if (base) {
+                            sceneVideoBasenames.push(base);
+                            setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                        }
                     } else {
                         throw new Error(`FLF ${i + 1}→${i + 2} の出力動画が見つかりませんでした`);
                     }
@@ -14213,7 +14551,10 @@ async function startGeneration() {
                     const vid = pickBestOutput(res.outputs, 'video');
                     if (vid?.filename) {
                         const base = String(vid.filename).split('/').pop();
-                        if (base) sceneVideoBasenames.push(base);
+                        if (base) {
+                            sceneVideoBasenames.push(base);
+                            setSceneVideoBasenameAtIndex({ presetId: preset.id, index: i, basename: base });
+                        }
                     } else {
                         throw new Error(`シーン${i + 1}のI2V出力動画が見つかりませんでした`);
                     }
@@ -14629,7 +14970,7 @@ async function startGeneration() {
                     if (Number.isFinite(frames) && frames > 0) params.frames = frames;
                 }
 
-                // LTX: default server behavior is to strip audio unless explicitly disabled.
+                // LTX: strip audio unless generateAudio is enabled.
                 if (String(wf || '').startsWith('ltx2_')) {
                     params.strip_audio = !state.generateAudio;
                     console.log('[SimpleVideo] LTX audio setting: generateAudio=', state.generateAudio, 'strip_audio=', params.strip_audio);
@@ -14663,7 +15004,10 @@ async function startGeneration() {
                 const vid = pickBestOutput(lastJob.outputs, 'video');
                 if (vid?.filename) {
                     const base = String(vid.filename).split('/').pop();
-                    if (base) sceneVideoBasenames.push(base);
+                    if (base) {
+                        sceneVideoBasenames.push(base);
+                        setSceneVideoBasenameAtIndex({ presetId: preset.id, index: sceneIndex, basename: base });
+                    }
 
                     // For continuity mode, extract last frame for the next scene.
                     if (continuityMode === 'last_frame' && sceneIndex < scenePrompts.length - 1) {

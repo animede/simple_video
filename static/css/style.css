@@ -8759,13 +8759,25 @@ body.simple-video-enabled #simpleVideoLeft {
     font-size: 11px;
     color: var(--text-secondary);
     line-height: 1.5;
-    max-height: 80px;
-    overflow-y: auto;
+    border-radius: 4px;
+}
+
+.simple-video-character-analysis-result textarea {
+    width: 100%;
+    min-height: 60px;
+    max-height: 200px;
     padding: 8px;
     background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+    resize: vertical;
     white-space: pre-wrap;
     word-break: break-word;
+    font-family: inherit;
+    box-sizing: border-box;
 }
 
 .simple-video-character-analysis-options {
