@@ -285,6 +285,7 @@ class UtilityRequest(BaseModel):
     scene_durations_sec: Optional[List[float]] = None
     target_duration_sec: Optional[float] = None
     prompt: Optional[str] = None
+    generate_audio: Optional[bool] = None  # Whether the video workflow will generate audio (LTX-2.3)
 
 
 class TranslateRequest(BaseModel):
@@ -644,6 +645,22 @@ def _apply_basic_parameters(workflow: Dict[str, Any], payload: WorkflowRequest) 
         _set_if_present(inputs, ["lyrics_strength"], params.get("lyrics_strength"))
 
         class_type = str(node.get("class_type", ""))
+
+        # PrimitiveInt nodes with _meta.title "WIDTH" or "HEIGHT" are used by
+        # LTX/Wan workflows to control output resolution.  Update their value so
+        # the entire downstream chain (ResizeImageMask → GetImageSize →
+        # EmptyLTXVLatentVideo) receives the user-specified size consistently.
+        if class_type == "PrimitiveInt":
+            _prim_title = str(node.get("_meta", {}).get("title", "")).strip().upper()
+            if _prim_title == "WIDTH":
+                _w = _to_positive_int(params.get("width"))
+                if _w is not None:
+                    inputs["value"] = _w
+            elif _prim_title == "HEIGHT":
+                _h = _to_positive_int(params.get("height"))
+                if _h is not None:
+                    inputs["value"] = _h
+
         if class_type == "WanFirstLastFrameToVideo":
             width = _to_positive_int(params.get("width"))
             height = _to_positive_int(params.get("height"))
@@ -2372,6 +2389,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         client = get_openai_client()
         output_type = str(req.output_type or "video").strip().lower()
         target_workflow = str(req.target_workflow or "").strip().lower()
+        generate_audio = bool(req.generate_audio) if req.generate_audio is not None else None
         complexity = str(req.prompt_complexity or "standard").strip().lower()
         if complexity not in {"basic", "standard", "rich"}:
             complexity = "standard"
@@ -2427,10 +2445,50 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 )
             elif output_type == "video":
                 if target_workflow.startswith("ltx2_"):
-                    system_role = (
-                        "You are a prompt engineer for LTX-2 video generation. "
-                        "Output practical cinematic prompts, one scene per line, #N:."
+                    # LTX-2.3 optimized system role based on official prompting guide
+                    _ltx_base = (
+                        "You are an expert prompt engineer for LTX-2.3 cinematic video generation. "
+                        "Write each scene prompt as a single flowing paragraph in present tense. "
+                        "Structure each prompt following this order: "
+                        "1) Establish the shot using cinematography terms (e.g. INT./EXT., wide shot, medium close-up). "
+                        "2) Set the scene with lighting, color palette, textures, and atmosphere. "
+                        "3) Describe the core action as a natural chronological sequence. Keep to 1-2 actions maximum per scene. "
+                        "4) Define characters by physical appearance (age, hair, clothing, distinguishing details). "
+                        "Express emotion ONLY through observable body language — NEVER through adjective labels. "
+                        "FORBIDDEN emotion words (never use these): happy, sad, excited, joyful, joy, wonder, happiness, "
+                        "determined, heartwarming, peaceful, magical, whimsical, festive, cheerful, melancholy, anxious. "
+                        "INSTEAD write what the body does: 'lips curl upward', 'shoulders hunch forward', "
+                        "'fingers tap rapidly on the surface', 'chin lifts and chest expands', 'eyes widen and jaw drops slightly'. "
+                        "5) Specify camera movement using precise film terms: dollies, tracks, pans, tilts, pushes in, pulls back, "
+                        "handheld, over-the-shoulder, static frame. Include what appears after the camera moves. "
                     )
+                    if generate_audio:
+                        # LTX-2.3 with native audio generation enabled
+                        _ltx_base += (
+                            "6) Describe audio: ambient sounds, sound effects, music, and dialogue. "
+                            "Place spoken dialogue in quotation marks. Specify language and accent if relevant. "
+                        )
+                    else:
+                        # LTX-2.3 video-only mode (M2V or audio stripped): maximize visual detail
+                        _ltx_base += (
+                            "6) Do NOT include any audio, sound, music, melody, or scent descriptions — "
+                            "this is a VISUAL-ONLY model. Use the saved token budget for richer visual descriptions: "
+                            "material textures, light behavior, atmospheric particles, and precise motion choreography. "
+                        )
+                    _ltx_base += (
+                        "CRITICAL RULE — SCENE ISOLATION: Each prompt is fed to the model in COMPLETE ISOLATION. "
+                        "The model has ZERO knowledge of other scenes. Therefore, ANY cross-scene reference is wasted tokens. "
+                        "NEVER write: 'consistent with previous scene', 'maintaining continuity', 'from the earlier shot', "
+                        "'as established', 'continues from', 'same as before', 'the journey continues', 'connected to previous'. "
+                        "Instead, re-state all necessary visual details within each prompt independently. "
+                        "ALSO FORBIDDEN: 'hyper-realistic 3D', 'creating a sense of', 'conveying', 'evoking', "
+                        "'suggesting a feeling of' — describe only what is VISIBLE on screen. "
+                        "Keep each prompt under 200 words and 4-8 sentences. "
+                        "Avoid: readable text/logos, complex physics (flying cars, zero gravity), "
+                        "scene overload with too many characters. "
+                        "Output exactly N prompts, one per line, with #N:."
+                    )
+                    system_role = _ltx_base
                 elif target_workflow.startswith("wan22_"):
                     system_role = (
                         "You are a prompt engineer for Wan2.2 video generation. "
@@ -2456,17 +2514,32 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 "rich": "Use 6-9 detailed sentences with foreground/midground/background motion layers, camera rhythm, lighting transitions, and continuity locks.",
             }
 
-            video_structure_hint = (
-                "For each scene, include these aspects in natural prose: "
-                "subject identity (consistent), environment/time/weather, key action, camera direction, "
-                "lighting/color mood, texture/style keywords, and continuity note from previous scene. "
-                "Avoid logos, subtitles, watermark text, broken anatomy, and abrupt identity changes. "
-                "Use ONE full-frame composition per scene only. "
-                "Never use split-screen, collage, diptych/triptych, comic-panel, storyboard grid, or multi-panel layout. "
-                "Avoid montage-like packed descriptions that imply multiple simultaneous subframes. "
-                "Keep exactly one primary instance of the main subject in each frame unless the user explicitly requests a crowd/group. "
-                "Do not duplicate or clone the same character in one frame."
-            )
+            # Use LTX-2.3 specific structure hint when targeting LTX workflows
+            if target_workflow.startswith("ltx2_"):
+                video_structure_hint = (
+                    "For each scene, write a single flowing paragraph in present tense. "
+                    "Include: shot type (wide/medium/close-up), subject identity (re-state full physical details every time), "
+                    "environment with specific lighting and color palette, 1-2 key actions described chronologically, "
+                    "camera movement using precise film terms (dolly, track, pan, tilt, handheld, static). "
+                    "Show emotion through body language ONLY — never adjective labels. "
+                    "Each prompt must be self-contained: re-describe the subject fully, never refer to other scenes. "
+                    "Describe only what is VISIBLE: no scent, no sound (unless audio mode), no taste, no narrator commentary. "
+                    "Avoid: readable text/logos, split-screen/collage/multi-panel layouts, more than one primary subject instance, "
+                    "scene overload with too many simultaneous actions. "
+                    "Keep under 200 words per scene."
+                )
+            else:
+                video_structure_hint = (
+                    "For each scene, include these aspects in natural prose: "
+                    "subject identity (consistent), environment/time/weather, key action, camera direction, "
+                    "lighting/color mood, texture/style keywords, and continuity note from previous scene. "
+                    "Avoid logos, subtitles, watermark text, broken anatomy, and abrupt identity changes. "
+                    "Use ONE full-frame composition per scene only. "
+                    "Never use split-screen, collage, diptych/triptych, comic-panel, storyboard grid, or multi-panel layout. "
+                    "Avoid montage-like packed descriptions that imply multiple simultaneous subframes. "
+                    "Keep exactly one primary instance of the main subject in each frame unless the user explicitly requests a crowd/group. "
+                    "Do not duplicate or clone the same character in one frame."
+                )
 
             image_structure_hint = (
                 "For each scene, include: subject, composition, environment, lighting direction, color palette, "
