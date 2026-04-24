@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import math
 import mimetypes
 import os
 import random
@@ -263,6 +264,7 @@ class UtilityRequest(BaseModel):
     audio: Optional[str] = None
     fps: Optional[int] = 16
     keep_audio: Optional[bool] = None
+    preserve_video_length: Optional[bool] = None
     xfade_transition: Optional[str] = None   # e.g. 'fade', 'dissolve', 'wipeleft', etc.
     xfade_duration: Optional[float] = None   # transition duration in seconds (default 0.5)
     xfade_transitions: Optional[List[str]] = None  # per-boundary xfade types, e.g. ['none','dissolve','fadeblack','none']
@@ -284,6 +286,9 @@ class UtilityRequest(BaseModel):
     scene_prompts: Optional[List[str]] = None
     scene_durations_sec: Optional[List[float]] = None
     target_duration_sec: Optional[float] = None
+    min_scene_sec: Optional[int] = None
+    max_scene_sec: Optional[int] = None
+    propose_scene_count: Optional[bool] = None
     prompt: Optional[str] = None
     generate_audio: Optional[bool] = None  # Whether the video workflow will generate audio (LTX-2.3)
 
@@ -660,6 +665,14 @@ def _apply_basic_parameters(workflow: Dict[str, Any], payload: WorkflowRequest) 
                 _h = _to_positive_int(params.get("height"))
                 if _h is not None:
                     inputs["value"] = _h
+            elif _prim_title in {"LENGTH", "FRAMES", "FRAMES_NUMBER"}:
+                _frames = _to_positive_int(params.get("frames"))
+                if _frames is not None:
+                    inputs["value"] = _frames
+            elif _prim_title in {"FRAME RATE(INT)", "FRAME RATE", "FPS"}:
+                _fps = _to_positive_int(params.get("fps"))
+                if _fps is not None:
+                    inputs["value"] = _fps
 
         if class_type == "WanFirstLastFrameToVideo":
             width = _to_positive_int(params.get("width"))
@@ -867,10 +880,19 @@ def _materialize_outputs_to_local_dir(outputs: list[Dict[str, Any]]) -> list[Dic
         item_type = str(item.get("type") or "output")
         source = _find_existing_media_file(filename, subfolder, item_type)
         if source is not None:
+            media_type = str(item.get("media_type") or _classify_output_media_type(Path(filename)) or "").lower()
+            if media_type == "video":
+                ready_duration = _wait_for_media_ready(source, "video", timeout_sec=30.0, poll_interval_sec=0.5)
+                if ready_duration is None or ready_duration <= 0.05:
+                    raise RuntimeError(f"Generated video file is not ready or has invalid duration: {source.name}")
             target = OUTPUT_DIR / subfolder / filename if subfolder else OUTPUT_DIR / filename
             target.parent.mkdir(parents=True, exist_ok=True)
             if source.resolve() != target.resolve():
                 shutil.copy2(source, target)
+                if media_type == "video":
+                    copied_duration = _wait_for_media_ready(target, "video", timeout_sec=10.0, poll_interval_sec=0.5)
+                    if copied_duration is None or copied_duration <= 0.05:
+                        raise RuntimeError(f"Copied video file is invalid after materialization: {target.name}")
         normalized.append(item)
     return normalized
 
@@ -903,8 +925,39 @@ def _strip_audio_from_outputs(outputs: list[Dict[str, Any]]) -> list[Dict[str, A
 
         stripped_name = f"{video_path.stem}_noaudio{video_path.suffix}"
         stripped_path = video_path.with_name(stripped_name)
-        cmd = ["ffmpeg", "-y", "-i", str(video_path), "-c:v", "copy", "-an", str(stripped_path)]
-        _run_ffmpeg(cmd)
+        src_duration = _wait_for_media_ready(video_path, "video", timeout_sec=10.0, poll_interval_sec=0.5)
+        if src_duration is None or src_duration <= 0.05:
+            raise RuntimeError(f"Source video has invalid duration before audio strip: {video_path.name}")
+
+        copy_cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-map", "0:v:0",
+            "-c:v", "copy",
+            "-an",
+            str(stripped_path),
+        ]
+        _run_ffmpeg(copy_cmd)
+
+        stripped_duration = _wait_for_media_ready(stripped_path, "video", timeout_sec=5.0, poll_interval_sec=0.5)
+        if stripped_duration is None or stripped_duration <= 0.05:
+            reencode_cmd = [
+                "ffmpeg", "-y",
+                "-fflags", "+genpts",
+                "-i", str(video_path),
+                "-map", "0:v:0",
+                "-vf", "setpts=PTS-STARTPTS",
+                "-vsync", "cfr",
+                "-r", "25",
+                "-an",
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                str(stripped_path),
+            ]
+            _run_ffmpeg(reencode_cmd)
+            stripped_duration = _wait_for_media_ready(stripped_path, "video", timeout_sec=10.0, poll_interval_sec=0.5)
+            if stripped_duration is None or stripped_duration <= 0.05:
+                raise RuntimeError(f"Audio-stripped video has invalid duration: {stripped_path.name}")
 
         next_item = dict(item)
         next_item["filename"] = stripped_name
@@ -912,11 +965,248 @@ def _strip_audio_from_outputs(outputs: list[Dict[str, Any]]) -> list[Dict[str, A
     return updated
 
 
+def _probe_media_dimensions(path: Path) -> Optional[tuple[int, int]]:
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=p=0:s=x",
+            str(path),
+        ],
+        capture_output=True, text=True
+    )
+    raw = str(result.stdout or "").strip()
+    try:
+        width_str, height_str = raw.split("x", 1)
+        width = int(width_str)
+        height = int(height_str)
+        if width > 0 and height > 0:
+            return width, height
+    except Exception:
+        return None
+    return None
+
+
+def _probe_media_duration(path: Path) -> Optional[float]:
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        value = float(str(result.stdout or "").strip())
+        if math.isfinite(value) and value > 0:
+            return value
+    except Exception:
+        return None
+    return None
+
+
+def _wait_for_media_ready(
+    path: Path,
+    media_type: str,
+    *,
+    timeout_sec: float = 20.0,
+    poll_interval_sec: float = 0.5,
+    min_duration_sec: Optional[float] = None,
+) -> Optional[float]:
+    deadline = time.time() + max(0.1, float(timeout_sec or 0.1))
+    last_size: Optional[int] = None
+    stable_hits = 0
+    media_kind = str(media_type or "").strip().lower()
+
+    while time.time() < deadline:
+        try:
+            if path.exists() and path.is_file():
+                stat = path.stat()
+                size = int(stat.st_size)
+                age_sec = max(0.0, time.time() - float(stat.st_mtime))
+                if size > 0:
+                    if last_size == size:
+                        stable_hits += 1
+                    else:
+                        last_size = size
+                        stable_hits = 0
+
+                    if media_kind == "video":
+                        duration = _probe_media_duration(path)
+                        dims = _probe_media_dimensions(path)
+                        duration_ok = duration is not None and duration > 0.05
+                        if duration_ok and min_duration_sec is not None:
+                            duration_ok = duration >= max(0.05, float(min_duration_sec))
+                        if duration_ok and dims and stable_hits >= 2 and age_sec >= 1.0:
+                            return duration
+                    elif stable_hits >= 1:
+                        return None
+        except Exception:
+            pass
+
+        time.sleep(max(0.1, float(poll_interval_sec or 0.1)))
+
+    if media_kind == "video":
+        duration = _probe_media_duration(path)
+        if duration is None or duration <= 0.05:
+            return None
+        if min_duration_sec is not None and duration < max(0.05, float(min_duration_sec)):
+            return None
+        return duration
+    return None
+
+
+def _validate_generated_video_outputs(
+    outputs: list[Dict[str, Any]],
+    min_duration_sec: Optional[float] = None,
+    timeout_sec: float = 10.0,
+) -> list[Dict[str, Any]]:
+    validated: list[Dict[str, Any]] = []
+    for item in outputs:
+        media_type = str(item.get("media_type") or item.get("type") or "").lower()
+        filename = str(item.get("filename") or "").strip()
+        if media_type != "video" and _classify_output_media_type(Path(filename)) != "video":
+            validated.append(item)
+            continue
+
+        subfolder = str(item.get("subfolder") or "").strip("/\\")
+        source_path = _find_existing_media_file(filename, subfolder, str(item.get("type") or "output"))
+        if source_path is None:
+            raise RuntimeError(f"Generated video output not found: {filename}")
+
+        duration = _wait_for_media_ready(
+            source_path,
+            "video",
+            timeout_sec=timeout_sec,
+            poll_interval_sec=0.5,
+            min_duration_sec=min_duration_sec,
+        )
+        if duration is None or duration <= 0.05:
+            raise RuntimeError(f"Generated video output has invalid duration: {source_path.name}")
+
+        validated.append(item)
+
+    return validated
+
+
+def _normalize_media_file_to_size(path: Path, media_type: str, width: int, height: int) -> Path:
+    width = max(2, int(width) // 2 * 2)
+    height = max(2, int(height) // 2 * 2)
+    output_path = path.with_name(f"{path.stem}_{width}x{height}{path.suffix}")
+    temp_output_path = path.with_name(f"{path.stem}_{width}x{height}.tmp_{uuid.uuid4().hex[:8]}{path.suffix}")
+    source_duration = _probe_media_duration(path) if str(media_type) == "video" else None
+    fit_filter = (
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+    )
+
+    if str(media_type) == "image":
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(path),
+            "-vf", fit_filter,
+            "-frames:v", "1",
+            str(temp_output_path),
+        ]
+    else:
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(path),
+            "-map_metadata", "-1",
+            "-map_chapters", "-1",
+            "-vf", fit_filter,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+            "-c:a", "aac", "-b:a", "128k",
+            str(temp_output_path),
+        ]
+    try:
+        _run_ffmpeg(cmd)
+        if str(media_type) == "video":
+            min_expected_duration = None
+            if source_duration is not None and source_duration > 0.05:
+                min_expected_duration = max(0.05, source_duration * 0.9)
+            out_duration = _wait_for_media_ready(
+                temp_output_path,
+                "video",
+                timeout_sec=15.0,
+                poll_interval_sec=0.5,
+                min_duration_sec=min_expected_duration,
+            )
+            if out_duration is None or out_duration <= 0.05:
+                raise RuntimeError(f"Normalized video output has invalid duration: {temp_output_path.name}")
+        temp_output_path.replace(output_path)
+        return output_path if output_path.exists() else path
+    finally:
+        temp_output_path.unlink(missing_ok=True)
+
+
+def _normalize_generated_outputs_size(outputs: list[Dict[str, Any]], width: Optional[int], height: Optional[int]) -> list[Dict[str, Any]]:
+    target_w = _to_positive_int(width)
+    target_h = _to_positive_int(height)
+    if target_w is None or target_h is None:
+        return outputs
+
+    normalized: list[Dict[str, Any]] = []
+    for item in outputs:
+        media_type = str(item.get("media_type") or "")
+        if media_type not in {"video", "image"}:
+            normalized.append(item)
+            continue
+
+        filename = str(item.get("filename") or "").strip()
+        subfolder = str(item.get("subfolder") or "").strip("/\\")
+        if not filename:
+            normalized.append(item)
+            continue
+
+        source_path = _find_existing_media_file(filename, subfolder, str(item.get("type") or "output"))
+        if source_path is None:
+            normalized.append(item)
+            continue
+
+        dims = _probe_media_dimensions(source_path)
+        if dims == (target_w, target_h):
+            normalized.append(item)
+            continue
+
+        try:
+            normalized_path = _normalize_media_file_to_size(source_path, media_type, target_w, target_h)
+            next_item = dict(item)
+            next_item["filename"] = normalized_path.name
+            next_item["subfolder"] = subfolder
+            normalized.append(next_item)
+        except Exception as exc:
+            print(f"[normalize_outputs] failed for {source_path.name}: {exc}")
+            normalized.append(item)
+
+    return normalized
+
+
+def _get_expected_video_duration_sec(payload: WorkflowRequest) -> Optional[float]:
+    fps = _to_positive_int(payload.fps)
+    frames = _to_positive_int(payload.frames)
+    if fps is None or frames is None or fps <= 0 or frames <= 1:
+        return None
+    # Allow up to two-frame variance from muxing/rounding while still rejecting
+    # obviously incomplete outputs like single-frame 0s files.
+    return max(1.0 / fps, (frames - 2) / fps)
+
+
 async def execute_generate_job(job: Job) -> Dict[str, Any]:
     payload = WorkflowRequest(**job.request_payload)
     workflow = _load_workflow(payload.workflow)
     _apply_basic_parameters(workflow, payload)
-    await asyncio.to_thread(_sync_workflow_input_images_to_comfy_input, workflow, job.session_id)
+    await asyncio.to_thread(
+        _sync_workflow_input_images_to_comfy_input,
+        workflow,
+        job.session_id,
+        payload.width,
+        payload.height,
+    )
 
     prompt_id = await asyncio.to_thread(_queue_prompt_to_comfyui, workflow)
     await job_manager.update(job, prompt_id=prompt_id, progress=0.1, message="Queued in ComfyUI")
@@ -935,8 +1225,26 @@ async def execute_generate_job(job: Job) -> Dict[str, Any]:
         if isinstance(history_entry, dict):
             outputs = _extract_outputs(history, prompt_id)
             outputs = await asyncio.to_thread(_materialize_outputs_to_local_dir, outputs)
+            outputs = await asyncio.to_thread(
+                _validate_generated_video_outputs,
+                outputs,
+                None,
+                45.0,
+            )
             if _to_bool(payload.strip_audio or payload.parameters.get("strip_audio")):
                 outputs = await asyncio.to_thread(_strip_audio_from_outputs, outputs)
+                outputs = await asyncio.to_thread(
+                    _validate_generated_video_outputs,
+                    outputs,
+                    None,
+                    20.0,
+                )
+            outputs = await asyncio.to_thread(
+                _validate_generated_video_outputs,
+                outputs,
+                None,
+                20.0,
+            )
             return {
                 "prompt_id": prompt_id,
                 "outputs": outputs,
@@ -1201,7 +1509,12 @@ def _build_output_item(filename: str, subfolder: str, media_type: str, out_type:
     }
 
 
-def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any], session_id: Optional[str] = None) -> None:
+def _sync_workflow_input_images_to_comfy_input(
+    workflow: Dict[str, Any],
+    session_id: Optional[str] = None,
+    target_width: Optional[int] = None,
+    target_height: Optional[int] = None,
+) -> None:
     try:
         COMFY_INPUT_DIR.mkdir(parents=True, exist_ok=True)
     except Exception:
@@ -1244,6 +1557,20 @@ def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any], session
         if source is None:
             continue
 
+        resolved_w = _to_positive_int(target_width)
+        resolved_h = _to_positive_int(target_height)
+        if resolved_w is not None and resolved_h is not None:
+            dims = _probe_media_dimensions(source)
+            if dims != (resolved_w, resolved_h):
+                resized_name = f"{Path(safe_name).stem}_{resolved_w}x{resolved_h}{Path(safe_name).suffix}"
+                target = COMFY_INPUT_DIR / resized_name
+                if not target.exists():
+                    normalized = _normalize_media_file_to_size(source, "image", resolved_w, resolved_h)
+                    if normalized.resolve() != target.resolve():
+                        shutil.copy2(normalized, target)
+                inputs["image"] = resized_name
+                continue
+
         target = COMFY_INPUT_DIR / safe_name
         if source.resolve() != target.resolve():
             shutil.copy2(source, target)
@@ -1251,9 +1578,21 @@ def _sync_workflow_input_images_to_comfy_input(workflow: Dict[str, Any], session
 
 
 def _run_ffmpeg(cmd: list[str]) -> None:
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    final_cmd = list(cmd)
+    if "-hide_banner" not in final_cmd:
+        final_cmd.insert(1, "-hide_banner")
+    if "-loglevel" not in final_cmd:
+        final_cmd.insert(2, "-loglevel")
+        final_cmd.insert(3, "error")
+
+    proc = subprocess.run(final_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if proc.returncode != 0:
-        raise RuntimeError(proc.stderr or "ffmpeg failed")
+        stderr_text = str(proc.stderr or "").strip()
+        if stderr_text:
+            lines = stderr_text.splitlines()
+            if len(lines) > 40:
+                stderr_text = "\n".join(lines[-40:])
+        raise RuntimeError(stderr_text or "ffmpeg failed")
 
 
 def _extract_last_frame_from_video(video_path: Path, output_dir: Path) -> str:
@@ -1468,11 +1807,11 @@ def _fallback_genre_tags_from_lyrics(lyrics: str) -> tuple[str, str]:
     # Additional atmosphere
     if any(k in text for k in ["night", "moon", "夜", "月"]):
         tags.append("night atmosphere")
-    if any(k in text for k in ["sky", "star", "空", "星"]):
-        tags.append("cinematic")
+    tags.append("direct opening")
+    tags.append("short intro")
 
     if not tags:
-        tags = ["emotional", "cinematic", "warm", "vocal"]
+        tags = ["emotional", "warm", "vocal", "direct opening", "short intro"]
 
     # keep order + dedup
     seen: set[str] = set()
@@ -1511,7 +1850,7 @@ def _fallback_prompt_generate(
     scene_variation: str = "normal",
     motion_level: str = "medium",
 ) -> tuple[list[Dict[str, Any]], str]:
-    count = max(1, min(24, int(scene_count or 1)))
+    count = max(1, min(50, int(scene_count or 1)))
     source_units = _split_text_units(user_prompt)
     if not source_units:
         source_units = ["A coherent visual scene with clear subject and environment"]
@@ -1678,12 +2017,16 @@ def _fallback_lyrics_generate(
     duration = int(target_duration) if target_duration is not None else 60
     duration = max(20, min(300, duration))
 
+    verse1_sec = max(10, round(duration * 0.32))
+    chorus1_sec = max(10, round(duration * 0.30))
+    verse2_sec = max(8, round(duration * 0.24))
+    outro_sec = max(4, duration - (verse1_sec + chorus1_sec + verse2_sec))
     parts: Dict[str, Any] = {
-        "intro": max(4, round(duration * 0.08)),
-        "verse1": max(10, round(duration * 0.28)),
-        "chorus1": max(10, round(duration * 0.28)),
-        "verse2": max(8, round(duration * 0.22)),
-        "outro": max(4, duration - (max(4, round(duration * 0.08)) + max(10, round(duration * 0.28)) + max(10, round(duration * 0.28)) + max(8, round(duration * 0.22)))),
+        "intro": 0,
+        "verse1": verse1_sec,
+        "chorus1": chorus1_sec,
+        "verse2": verse2_sec,
+        "outro": outro_sec,
     }
 
     theme = str(scenario or "A hopeful journey").strip()
@@ -1691,9 +2034,6 @@ def _fallback_lyrics_generate(
 
     if "japanese" in lang or lang in {"ja", "jp", "日本語"}:
         lyrics_body = "\n".join([
-            "[Intro]",
-            "[Instrumental]",
-            "",
             "[Verse 1]",
             f"{theme} を胸に、静かに歩き出す",
             "夜を越えて、光のほうへ",
@@ -1710,9 +2050,6 @@ def _fallback_lyrics_generate(
         ])
     elif "chinese" in lang or lang in {"zh", "中文"}:
         lyrics_body = "\n".join([
-            "[Intro]",
-            "[Instrumental]",
-            "",
             "[Verse 1]",
             f"带着 {theme} 的心愿慢慢前行",
             "穿过黑夜，迎向晨光",
@@ -1729,9 +2066,6 @@ def _fallback_lyrics_generate(
         ])
     else:
         lyrics_body = "\n".join([
-            "[Intro]",
-            "[Instrumental]",
-            "",
             "[Verse 1]",
             f"With {theme} in my chest, I take the first step",
             "Through the night, I move toward the light",
@@ -1986,6 +2320,8 @@ def _parse_lyrics_response(raw_response: str) -> tuple[Optional[int], Optional[D
     lyrics = re.sub(r"^```\w*\n?", "", lyrics)
     lyrics = re.sub(r"\n?```$", "", lyrics).strip()
     lyrics = _strip_romaji_lines(lyrics)
+    lyrics = _tighten_lyrics_intro(lyrics)
+    lyrics = _sanitize_ace_step_lyrics(lyrics)
     return recommended, parts, lyrics
 
 
@@ -2036,6 +2372,100 @@ def _strip_romaji_lines(text: str) -> str:
 
     result = "\n".join(out_lines)
     # Collapse 3+ consecutive blank lines into 2
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
+
+
+def _tighten_lyrics_intro(text: str) -> str:
+    """Trim a leading intro section when it is instrumental-only."""
+    raw = str(text or "").strip()
+    if not raw:
+        return raw
+
+    lines = raw.splitlines()
+    section_re = re.compile(r"^\s*\[[^\]]+\]\s*$")
+    intro_tag_re = re.compile(r"^\s*\[(?:intro|instrumental)(?:\s*-[^\]]+)?\]\s*$", re.IGNORECASE)
+    instrumental_line_re = re.compile(
+        r"^\s*(?:\[instrumental(?:\s*-[^\]]+)?\]|\((?:instrumental|intro|piano|guitar|strings|synth|drums?|beat|ambient|pad|melody|vocal chop|humming|music box|orchestra)[^)]*\))\s*$",
+        re.IGNORECASE,
+    )
+
+    start = 0
+    while start < len(lines) and not str(lines[start]).strip():
+        start += 1
+    if start >= len(lines) or not intro_tag_re.match(lines[start]):
+        return raw
+
+    end = start + 1
+    while end < len(lines) and not section_re.match(lines[end]):
+        end += 1
+
+    body = [str(line).strip() for line in lines[start + 1:end] if str(line).strip()]
+    if body and not all(instrumental_line_re.match(line) for line in body):
+        return raw
+
+    trimmed = lines[:start] + lines[end:]
+    result = "\n".join(trimmed).strip()
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result or raw
+
+
+def _sanitize_ace_step_lyrics(text: str) -> str:
+    """Normalize lyrics to conservative ACE-Step section tags only."""
+    raw = str(text or "").strip()
+    if not raw:
+        return raw
+
+    def _canonicalize_section_tag(line: str) -> Optional[str]:
+        m = re.match(r"^\s*\[([^\]]+)\]\s*$", str(line or ""))
+        if not m:
+            return None
+        inner = str(m.group(1) or "").strip()
+        base = re.split(r"\s+-\s+|\s*:\s*|\s*/\s*", inner, maxsplit=1)[0].strip()
+        norm = re.sub(r"\s+", " ", base).lower()
+        norm = norm.replace("pre chorus", "pre-chorus")
+
+        if norm in {"intro"}:
+            return "[Intro]"
+        if norm in {"instrumental", "inst"}:
+            return "[Instrumental]"
+        if norm in {"verse 1", "verse1"}:
+            return "[Verse 1]"
+        if norm in {"verse 2", "verse2"}:
+            return "[Verse 2]"
+        if norm in {"pre-chorus", "prechorus"}:
+            return "[Pre-Chorus]"
+        if norm in {"chorus", "hook"}:
+            return "[Chorus]"
+        if norm in {"bridge"}:
+            return "[Bridge]"
+        if norm in {"outro"}:
+            return "[Outro]"
+        return None
+
+    music_direction_re = re.compile(
+        r"^\s*(?:\((?:fade|fading|fade out|fade-in|fade in|ambient|atmospheric|anthemic|energetic|"
+        r"cinematic|whisper(?:ed)?|spoken|soft|hard|loud|quiet|reverb|echo|delay|synth|piano|guitar|"
+        r"strings|drums?|bass|instrumental|music box|pad|humming)[^)]*\)"
+        r"|\[(?!(?:intro|instrumental|inst|verse\s*1|verse1|verse\s*2|verse2|pre[ -]?chorus|chorus|hook|bridge|outro)\b)[^\]]+\])\s*$",
+        re.IGNORECASE,
+    )
+
+    out_lines: list[str] = []
+    for line in raw.splitlines():
+        stripped = str(line or "").strip()
+        if not stripped:
+            out_lines.append("")
+            continue
+        canonical_tag = _canonicalize_section_tag(stripped)
+        if canonical_tag is not None:
+            out_lines.append(canonical_tag)
+            continue
+        if music_direction_re.match(stripped):
+            continue
+        out_lines.append(line)
+
+    result = "\n".join(out_lines)
     result = re.sub(r"\n{3,}", "\n\n", result)
     return result.strip()
 
@@ -2129,6 +2559,127 @@ def _generate_spec(
     }
 
 
+def _fallback_duration_plan(
+    scene_count: int,
+    target_duration_sec: float,
+    min_scene_sec: int,
+    max_scene_sec: int,
+) -> list[int]:
+    count = max(1, min(50, int(scene_count or 1)))
+    min_sec = max(1, int(min_scene_sec or 2))
+    max_sec = max(min_sec, int(max_scene_sec or 7))
+    base_sec = max(min_sec, min(max_sec, 5))
+
+    durations = [base_sec] * count
+    target = int(round(float(target_duration_sec or (base_sec * count))))
+    target = max(count * min_sec, min(count * max_sec, target))
+
+    if count >= 2 and max_sec > min_sec:
+        pair_budget = max(1, (max_sec - min_sec) // 2)
+        left = 0
+        right = count - 1
+        swing = 1
+        while left < right:
+            dec_room = durations[left] - min_sec
+            inc_room = max_sec - durations[right]
+            shift = max(0, min(swing, dec_room, inc_room, pair_budget))
+            if shift > 0:
+                durations[left] -= shift
+                durations[right] += shift
+            left += 1
+            right -= 1
+            swing = 1 if swing >= pair_budget else (swing + 1)
+
+    delta = target - sum(durations)
+    center = (count - 1) / 2.0
+    growth_order = sorted(range(count), key=lambda i: abs(i - center))
+    shrink_order = sorted(range(count), key=lambda i: abs(i - center), reverse=True)
+    idx = 0
+    while delta != 0:
+        order = growth_order if delta > 0 else shrink_order
+        target_idx = order[idx % len(order)]
+        if delta > 0 and durations[target_idx] < max_sec:
+            durations[target_idx] += 1
+            delta -= 1
+        elif delta < 0 and durations[target_idx] > min_sec:
+            durations[target_idx] -= 1
+            delta += 1
+        idx += 1
+        if idx > (count * max(1, max_sec - min_sec) * 4):
+            break
+    return durations
+
+
+def _normalize_duration_plan(
+    proposed: list[Any],
+    scene_count: int,
+    target_duration_sec: float,
+    min_scene_sec: int,
+    max_scene_sec: int,
+) -> list[int]:
+    count = max(1, min(50, int(scene_count or 1)))
+    min_sec = max(1, int(min_scene_sec or 2))
+    max_sec = max(min_sec, int(max_scene_sec or 7))
+    target = int(round(float(target_duration_sec or (5 * count))))
+    target = max(count * min_sec, min(count * max_sec, target))
+
+    raw: list[float] = []
+    for value in list(proposed or []):
+        try:
+            n = float(value)
+        except Exception:
+            continue
+        if n > 0:
+            raw.append(n)
+    if not raw:
+        return _fallback_duration_plan(count, target, min_sec, max_sec)
+    if len(raw) < count:
+        raw.extend([raw[-1]] * (count - len(raw)))
+    raw = raw[:count]
+
+    clipped = [min(max_sec, max(min_sec, float(v))) for v in raw]
+    total = sum(clipped)
+    if total <= 0:
+        return _fallback_duration_plan(count, target, min_sec, max_sec)
+
+    scaled = [v * target / total for v in clipped]
+    floors = [int(math.floor(v)) for v in scaled]
+    durations = [min(max_sec, max(min_sec, n)) for n in floors]
+
+    remainders = [scaled[i] - floors[i] for i in range(count)]
+    delta = target - sum(durations)
+
+    while delta > 0:
+        candidates = sorted(range(count), key=lambda i: (remainders[i], -i), reverse=True)
+        moved = False
+        for idx in candidates:
+            if durations[idx] < max_sec:
+                durations[idx] += 1
+                delta -= 1
+                moved = True
+                if delta == 0:
+                    break
+        if not moved:
+            break
+
+    while delta < 0:
+        candidates = sorted(range(count), key=lambda i: (remainders[i], i))
+        moved = False
+        for idx in candidates:
+            if durations[idx] > min_sec:
+                durations[idx] -= 1
+                delta += 1
+                moved = True
+                if delta == 0:
+                    break
+        if not moved:
+            break
+
+    if sum(durations) != target:
+        return _fallback_duration_plan(count, target, min_sec, max_sec)
+    return durations
+
+
 async def execute_utility_job(job: Job) -> Dict[str, Any]:
     req = UtilityRequest(**job.request_payload)
     workflow = str(req.workflow or "").strip().lower()
@@ -2149,6 +2700,12 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         await job_manager.update(job, progress=0.15, message=f"Resolving {len(videos)} videos")
         video_paths = [await asyncio.to_thread(_resolve_media_path, item, "video") for item in videos]
         OUTPUT_DIR.joinpath("video").mkdir(parents=True, exist_ok=True)
+
+        durations = [await asyncio.to_thread(_wait_for_media_ready, p, "video", timeout_sec=8.0, poll_interval_sec=0.5) for p in video_paths]
+        invalid_indexes = [idx for idx, sec in enumerate(durations) if sec is None or sec <= 0.05]
+        if invalid_indexes:
+            bad_labels = ", ".join(f"#{idx + 1}({video_paths[idx].name})" for idx in invalid_indexes)
+            raise RuntimeError(f"video_concat aborted: invalid/zero-duration input videos detected: {bad_labels}")
 
         fps = int(req.fps or 16)
         out_name = f"concat_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}.mp4"
@@ -2175,19 +2732,33 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             # --- xfade mode: use filter_complex to apply transitions ---
             await job_manager.update(job, progress=0.30, message=f"Probing {len(video_paths)} videos")
 
-            def _probe_duration(path: Path) -> float:
-                """Get video duration in seconds via ffprobe."""
+            def _probe_video_size(path: Path) -> tuple[int, int]:
+                """Get primary video stream width/height via ffprobe."""
                 result = subprocess.run(
-                    ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                     "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+                    [
+                        "ffprobe", "-v", "error",
+                        "-select_streams", "v:0",
+                        "-show_entries", "stream=width,height",
+                        "-of", "csv=p=0:s=x",
+                        str(path),
+                    ],
                     capture_output=True, text=True
                 )
+                raw = str(result.stdout or "").strip()
                 try:
-                    return float(result.stdout.strip())
-                except (ValueError, AttributeError):
-                    return 5.0  # fallback
+                    width_str, height_str = raw.split("x", 1)
+                    width = int(width_str)
+                    height = int(height_str)
+                    if width > 0 and height > 0:
+                        return width, height
+                except Exception:
+                    pass
+                return 1280, 720
 
-            durations = [await asyncio.to_thread(_probe_duration, p) for p in video_paths]
+            sizes = [await asyncio.to_thread(_probe_video_size, p) for p in video_paths]
+            target_width, target_height = sizes[0] if sizes else (1280, 720)
+            target_width = max(2, int(target_width) // 2 * 2)
+            target_height = max(2, int(target_height) // 2 * 2)
             # Clamp xfade_dur so it doesn't exceed any clip length
             min_dur = min(durations) if durations else 5.0
             xfade_dur = min(xfade_dur, min_dur * 0.8)  # at most 80% of shortest clip
@@ -2210,28 +2781,38 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             for p in video_paths:
                 inputs += ["-i", str(p)]
 
+            # Normalize all input video streams for xfade.
+            # xfade requires matching frame size / pixel format / timeline.
+            filter_parts = []
+            normalized_video_labels: list[str] = []
+            for i in range(len(video_paths)):
+                norm_label = f"[vx{i}]"
+                normalized_video_labels.append(norm_label)
+                filter_parts.append(
+                    f"[{i}:v]fps={max(1, fps)},scale={target_width}:{target_height}:flags=lanczos,setsar=1,format=yuv420p,setpts=PTS-STARTPTS{norm_label}"
+                )
+
             # Build xfade filter chain: apply xfade between consecutive pairs
             # For boundaries with no xfade type (empty/"none"), use a 1-frame xfade as hard cut.
             # NOTE: duration=0.001 causes ffmpeg to drop frames due to timestamp rounding issues.
             #       Using 1/fps (one frame) produces a visually imperceptible cut and correct output.
             min_xfade_dur = round(1.0 / max(1, fps), 4)  # 1 frame duration for hard cuts
-            filter_parts = []
             cumulative = durations[0]
-            prev_label = "[0:v]"
+            prev_label = normalized_video_labels[0]
             for i in range(1, n):
                 bt = boundary_types[i - 1] if (i - 1) < len(boundary_types) else ""
                 out_label = f"[v{i}]" if i < n - 1 else "[vout]"
                 if bt and bt in VALID_XFADE:
                     offset = max(0, cumulative - xfade_dur)
                     filter_parts.append(
-                        f"{prev_label}[{i}:v]xfade=transition={bt}:duration={xfade_dur:.3f}:offset={offset:.3f}{out_label}"
+                        f"{prev_label}{normalized_video_labels[i]}xfade=transition={bt}:duration={xfade_dur:.3f}:offset={offset:.3f}{out_label}"
                     )
                     cumulative = offset + durations[i]
                 else:
                     # Hard cut: use 1-frame xfade (visually identical to a cut)
                     offset = max(0, cumulative - min_xfade_dur)
                     filter_parts.append(
-                        f"{prev_label}[{i}:v]xfade=transition=fade:duration={min_xfade_dur:.4f}:offset={offset:.4f}{out_label}"
+                        f"{prev_label}{normalized_video_labels[i]}xfade=transition=fade:duration={min_xfade_dur:.4f}:offset={offset:.4f}{out_label}"
                     )
                     cumulative = offset + durations[i]
                 prev_label = out_label
@@ -2258,7 +2839,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             filter_complex = ";".join(filter_parts) + audio_filter if audio_filter else ";".join(filter_parts)
 
             print(f"[video_concat] filter_complex={filter_complex}")
-            print(f"[video_concat] boundary_types={boundary_types}, durations={durations}")
+            print(f"[video_concat] boundary_types={boundary_types}, durations={durations}, sizes={sizes}, normalized_to={(target_width, target_height)}")
 
             cmd = [
                 "ffmpeg", "-y",
@@ -2266,6 +2847,8 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 "-filter_complex", filter_complex,
                 "-map", "[vout]",
                 *audio_map,
+                "-map_metadata", "-1",
+                "-map_chapters", "-1",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-r", str(max(1, fps)),
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -2275,7 +2858,27 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             elif audio_map:
                 cmd += ["-c:a", "aac", "-b:a", "128k"]
             cmd.append(str(out_path))
-            await asyncio.to_thread(_run_ffmpeg, cmd)
+            try:
+                await asyncio.to_thread(_run_ffmpeg, cmd)
+            except Exception as exc:
+                if audio_map:
+                    print(f"[video_concat] audio-aware xfade failed, retrying without audio: {exc}")
+                    retry_cmd = [
+                        "ffmpeg", "-y",
+                        *inputs,
+                        "-filter_complex", filter_complex,
+                        "-map", "[vout]",
+                        "-map_metadata", "-1",
+                        "-map_chapters", "-1",
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                        "-r", str(max(1, fps)),
+                        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                        "-an",
+                        str(out_path),
+                    ]
+                    await asyncio.to_thread(_run_ffmpeg, retry_cmd)
+                else:
+                    raise
         else:
             # --- Standard concat mode (no xfade) ---
             list_path = OUTPUT_DIR / "video" / f"concat_{job.job_id}.txt"
@@ -2287,6 +2890,8 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 "ffmpeg", "-y",
                 "-f", "concat", "-safe", "0",
                 "-i", str(list_path),
+                "-map_metadata", "-1",
+                "-map_chapters", "-1",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                 "-r", str(max(1, fps)),
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -2317,12 +2922,16 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             "ffmpeg", "-y",
             "-i", str(video_path),
             "-i", str(audio_path),
+            "-map_metadata", "-1",
+            "-map_chapters", "-1",
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-movflags", "+faststart",
             "-c:a", "aac", "-b:a", "192k",
-            "-map", "0:v:0", "-map", "1:a:0", "-shortest",
+            "-map", "0:v:0", "-map", "1:a:0",
             str(out_path),
         ]
+        if req.preserve_video_length is not True:
+            cmd.insert(-1, "-shortest")
         await asyncio.to_thread(_run_ffmpeg, cmd)
         return {"outputs": [_build_output_item(out_name, "movie", "video")]}
 
@@ -2384,7 +2993,7 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
     if workflow == "prompt_generate":
         if not req.user_prompt:
             raise RuntimeError("prompt_generate requires 'user_prompt'")
-        scene_count = max(1, min(24, int(req.scene_count or 1)))
+        scene_count = max(1, min(50, int(req.scene_count or 1)))
         await job_manager.update(job, progress=0.25, message="Calling LLM")
         client = get_openai_client()
         output_type = str(req.output_type or "video").strip().lower()
@@ -2398,6 +3007,17 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
         scene_variation = str(req.scene_variation or "normal").strip().lower()
         if scene_variation not in {"stable", "normal", "dynamic"}:
             scene_variation = "normal"
+        scene_durations = [
+            max(1, int(round(float(v))))
+            for v in list(req.scene_durations_sec or [])
+            if v is not None
+        ]
+        if scene_durations:
+            if len(scene_durations) < scene_count:
+                scene_durations.extend([scene_durations[-1]] * (scene_count - len(scene_durations)))
+            else:
+                scene_durations = scene_durations[:scene_count]
+        target_duration_sec = float(req.target_duration_sec) if req.target_duration_sec else None
 
         if translation_mode:
             system_role = (
@@ -2426,16 +3046,17 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 system_role = (
                     "You are an expert video editor choosing transition types between scenes. "
                     "Output exactly N prompts with #N:. "
-                    "CRITICAL: You MUST choose DIVERSE transition types based on scene relationships. "
-                    "Do NOT default to all-flf. Analyze the narrative context between each pair of adjacent scenes. "
+                    "CRITICAL: Choose transition types based on actual scene relationships. Avoid both extremes: do NOT overuse hard cuts, but also do NOT default almost everything to FLF. "
+                    "Use FLF only when adjacent scenes have strong visual continuity and can be bridged naturally. "
+                    "Analyze the narrative context between each pair of adjacent scenes. "
                     "For each scene, add [transition=TYPE] at the start of the line. "
                     "Rules for choosing transitions: "
-                    "- flf: ONLY when scenes share the same location AND continuous action (e.g. character continues walking in same room). "
-                    "- cut: When there is a clear scene change, different location, or time skip. This is the most common transition in real films. "
+                    "- flf: Use when scenes share strong continuity: same subject, closely related setting, continuous action, continuous camera progression, or a visually bridgeable transformation. "
+                    "- cut: Use when there is a clear scene break, location jump, time skip, viewpoint reset, or intentionally abrupt change. "
                     "- crossfade: For mood shifts, flashback/dream sequences, or emotional transitions. "
                     "- fade_black: For major time passage, act breaks, or dramatic pauses. "
                     "- none: Only for scene #1. "
-                    "A typical 5-scene video should have 2-3 different transition types. "
+                    "A typical 5-scene continuous narrative often contains a MIX: for example 1-3 flf transitions, with cut/crossfade/fade_black used where justified. "
                     "Scene #1 always uses [transition=none]."
                 )
             elif output_type == "video_frame":
@@ -2565,12 +3186,31 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 "dynamic": "Allow larger inter-scene differences while preserving identity continuity.",
             }[scene_variation]
 
+            duration_hint = ""
+            if scene_durations:
+                duration_lines = [f"#{idx + 1}: about {sec}s" for idx, sec in enumerate(scene_durations)]
+                duration_hint = (
+                    "Scene duration plan:\n"
+                    + "\n".join(duration_lines)
+                    + "\nDuration-direction rules: "
+                    "short scenes (2-4s) should focus on one simple visual beat with restrained camera movement; "
+                    "medium scenes (5-7s) may include one clear action progression and one camera move; "
+                    "longer scenes should use slower motion, broader camera travel, or more gradual staging. "
+                    "Do not cram multiple major actions into a short scene. Match motion density and pacing to each scene's duration.\n"
+                )
+            elif target_duration_sec:
+                duration_hint = (
+                    f"Target total duration: about {int(round(target_duration_sec))}s. "
+                    "Balance prompt pacing so motion complexity fits the intended duration.\n"
+                )
+
             user_message = (
                 f"Create exactly {scene_count} prompts for output_type={output_type}.\n"
                 f"User request:\n{req.user_prompt}\n\n"
                 f"Complexity: {complexity}. {complexity_rules[complexity]}\n"
                 f"Guidance: {(video_structure_hint if output_type in {'video', 'flf_sequence', 'mixed_sequence'} else image_structure_hint)}\n"
                 f"Variation preference: {variation_hint}\n"
+                f"{duration_hint}"
                 f"{motion_hint}\n"
                 "Output format: #1: [transition=none] <text>, #2: [transition=TYPE] <text>, ... "
                 "Plain text only. No markdown, no bold, no headers, no explanations. "
@@ -2624,9 +3264,10 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             scenario=scenario,
             language=str(req.language or "English"),
         )
+        use_ace_step_doc_guidance = bool(ACE_STEP_URL)
         system_role = (
             "You are a professional lyricist for AI music generation (ACE-Step 1.5). "
-            "You understand ACE-Step section tags and vocal control tags deeply.\n"
+            "You understand ACE-Step section tags and lyric structuring deeply.\n"
             "Return first-line JSON metadata and then lyrics with section tags."
         )
         target_duration = int(req.lyrics_target_duration) if req.lyrics_target_duration else None
@@ -2645,30 +3286,61 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 word_hint = f"Aim for roughly {max(40, round(target_duration * 2.0))}–{max(70, round(target_duration * 3.0))} English words (excluding section tags)."
         else:
             word_hint = "Adjust lyrics length to fit the recommended duration."
-        user_message = (
-            f"THEME: {scenario_for_lyrics}\n"
-            f"GENRE: {str(req.genre or 'pop').strip()}\n"
-            f"LANGUAGE: {lyrics_lang}\n"
-            f"TARGET_DURATION_SECONDS: {target_duration if target_duration is not None else 'auto'}\n"
-            f"{word_hint}\n"
-            "\n"
-            "=== OUTPUT FORMAT ===\n"
-            "1) First line JSON: {\"recommended_duration\": <int>, \"parts\": {...}}\n"
-            "2) Lyrics with section tags (see rules below)\n"
-            "\n"
-            "=== SECTION TAG RULES (ACE-Step 1.5) ===\n"
-            "- Use capitalized tags: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Outro]\n"
-            "- Use [Instrumental] for instrument-only sections (NOT [inst] or [Inst])\n"
-            "- You may add a style hint with dash: [Chorus - anthemic], [Bridge - whispered]\n"
-            "- Separate sections with blank lines for breathing room\n"
-            "- Keep each line singable: 4-8 words (English) or 6-15 characters (Japanese) per line\n"
-            "- Use (parentheses) for backing vocals/echo: 'We are the light (the light)'\n"
-            "\n"
-            "=== IMPORTANT ===\n"
-            "- Do NOT add romaji/romanization lines. Write lyrics in the target language only.\n"
-            "- For Japanese, write only Japanese text — no parenthesized romanized readings.\n"
-            "- No explanations. Output JSON + lyrics only.\n"
-        )
+        if use_ace_step_doc_guidance:
+            user_message = (
+                f"THEME: {scenario_for_lyrics}\n"
+                f"CAPTION CONTEXT: {str(req.genre or 'pop').strip()}\n"
+                f"LANGUAGE: {lyrics_lang}\n"
+                f"TARGET_DURATION_SECONDS: {target_duration if target_duration is not None else 'auto'}\n"
+                f"{word_hint}\n"
+                "\n"
+                "ACE-Step prompt guide policy:\n"
+                "- Lyrics control the time axis and song structure. Caption and Lyrics must tell the same story.\n"
+                "- Prefer a clear song form such as [Verse 1] -> [Pre-Chorus] -> [Chorus] -> [Verse 2] -> [Bridge] -> [Chorus] -> [Outro].\n"
+                "- Use capitalized tags only: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Outro], [Instrumental].\n"
+                "- Keep section tags simple and conservative. Do NOT add modifiers like [Chorus - energetic].\n"
+                "- Keep each line singable and short. Leave blank lines between sections.\n"
+                "- Use concrete imagery and one coherent metaphor world; avoid generic AI-sounding adjective piles.\n"
+                "- Avoid long cold opens. Start vocals or the main hook early for video use.\n"
+                "- If using [Intro], keep it extremely short.\n"
+                "- Do NOT add romaji/romanization lines. For Japanese, output Japanese only.\n"
+                "- Do NOT include arrangement cues like fading synth, atmospheric bridge, whispered outro, fade out, or instrumental production notes.\n"
+                "\n"
+                "=== OUTPUT FORMAT ===\n"
+                "1) First line JSON: {\"recommended_duration\": <int>, \"parts\": {...}}\n"
+                "2) Lyrics with section tags only\n"
+                "No explanations.\n"
+            )
+        else:
+            user_message = (
+                f"THEME: {scenario_for_lyrics}\n"
+                f"GENRE: {str(req.genre or 'pop').strip()}\n"
+                f"LANGUAGE: {lyrics_lang}\n"
+                f"TARGET_DURATION_SECONDS: {target_duration if target_duration is not None else 'auto'}\n"
+                f"{word_hint}\n"
+                "\n"
+                "=== OUTPUT FORMAT ===\n"
+                "1) First line JSON: {\"recommended_duration\": <int>, \"parts\": {...}}\n"
+                "2) Lyrics with section tags (see rules below)\n"
+                "\n"
+                "=== SECTION TAG RULES (ACE-Step 1.5) ===\n"
+                "- Use capitalized tags: [Intro], [Verse 1], [Verse 2], [Pre-Chorus], [Chorus], [Bridge], [Outro]\n"
+                "- Use [Instrumental] for instrument-only sections (NOT [inst] or [Inst])\n"
+                "- Do NOT add modifiers to section tags. Use [Chorus], not [Chorus - energetic].\n"
+                "- Do NOT write musical arrangement cues such as fading, atmospheric, whispered, synth, piano, or fade out in brackets/parentheses.\n"
+                "- Separate sections with blank lines for breathing room\n"
+                "- Keep each line singable: 4-8 words (English) or 6-15 characters (Japanese) per line\n"
+                "- Use (parentheses) for backing vocals/echo: 'We are the light (the light)'\n"
+                "\n"
+                "=== IMPORTANT ===\n"
+                "- Prioritize fast engagement for video sync. Avoid long cold opens.\n"
+                "- Start vocals or the main hook immediately, usually within the first 1-2 bars.\n"
+                "- For short/medium songs, prefer no separate [Intro] section at all.\n"
+                "- If you use [Intro], keep it extremely short and never a long instrumental opening.\n"
+                "- Do NOT add romaji/romanization lines. Write lyrics in the target language only.\n"
+                "- For Japanese, write only Japanese text — no parenthesized romanized readings.\n"
+                "- No explanations. Output JSON + lyrics only.\n"
+            )
         try:
             response = await chat_req(client, user_message, system_role, temperature=0.8, max_tokens=4000)
             recommended_duration, parts_timing, lyrics_text = _parse_lyrics_response(response)
@@ -2714,34 +3386,70 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
             raise RuntimeError("lyrics_to_tags requires 'lyrics'")
         await job_manager.update(job, progress=0.25, message="Analyzing lyrics")
         client = get_openai_client()
-        system_role = (
-            "You are a music style/caption expert for ACE-Step 1.5 AI music generation.\n"
-            "Your task is to generate a Caption (comma-separated tags) that will be used as the \"prompt\" "
-            "field when generating music with ACE-Step 1.5.\n"
-            "\n"
-            "Output exactly two lines:\n"
-            "GENRE: <primary genre, e.g. pop / rock / jazz / electronic / ...>\n"
-            "TAGS: <3-7 comma-separated tags covering the 5 dimensions below>\n"
-            "\n"
-            "=== 5 CAPTION DIMENSIONS (include in this order) ===\n"
-            "1. Genre / Era: e.g. J-POP, 80s synth pop, jazz ballad, cinematic orchestral\n"
-            "2. Key instruments: e.g. piano, acoustic guitar, synth, strings, brass\n"
-            "3. Mood / adjective: e.g. emotional, uplifting, dark, dreamy, energetic\n"
-            "4. Tempo feel: e.g. slow tempo, mid-tempo, fast-paced, groovy (optional if obvious)\n"
-            "5. Vocal type: e.g. female vocal, male vocal, powerful, whisper, no vocals (optional)\n"
-            "\n"
-            "=== RULES ===\n"
-            "- 3-7 tags is the sweet spot. Never exceed 10.\n"
-            "- Do NOT include BPM numbers, key signatures, or time signatures in TAGS (those are set separately).\n"
-            "- Avoid contradictions: don't combine 'upbeat' + 'melancholic', or 'ambient' + 'metal'.\n"
-            "- Write tags in English for best ACE-Step compatibility.\n"
-            "- No explanations. Output GENRE and TAGS lines only."
-        )
+        use_ace_step_doc_guidance = bool(ACE_STEP_URL)
+        if use_ace_step_doc_guidance:
+            system_role = (
+                "You are a music Caption expert for ACE-Step 1.5.\n"
+                "Create a high-quality comma-separated Caption aligned with the ACE-Step prompt guide.\n"
+                "Caption is the most important style input and must stay consistent with the lyrics story.\n"
+                "\n"
+                "Output exactly two lines:\n"
+                "GENRE: <primary genre>\n"
+                "TAGS: <3-7 comma-separated tags>\n"
+                "\n"
+                "Use this recommended order when possible:\n"
+                "1. Genre / era\n"
+                "2. Key instruments\n"
+                "3. Mood / adjectives\n"
+                "4. Tempo feel\n"
+                "5. Vocal type\n"
+                "\n"
+                "Rules:\n"
+                "- Prefer compact comma-separated tags, not prose.\n"
+                "- 3-7 tags is the sweet spot.\n"
+                "- Keep tags mutually consistent; avoid contradictions.\n"
+                "- Tags must reflect the same world and emotion as the lyrics.\n"
+                "- Use English tags for ACE-Step compatibility.\n"
+                "- Do NOT include BPM numbers, key signatures, or time signatures here.\n"
+                "- For video-oriented songs, prefer direct opening / short intro / early hook when compatible.\n"
+                "- No explanations. Output GENRE and TAGS lines only."
+            )
+        else:
+            system_role = (
+                "You are a music style/caption expert for ACE-Step 1.5 AI music generation.\n"
+                "Your task is to generate a Caption (comma-separated tags) that will be used as the \"prompt\" "
+                "field when generating music with ACE-Step 1.5.\n"
+                "\n"
+                "Output exactly two lines:\n"
+                "GENRE: <primary genre, e.g. pop / rock / jazz / electronic / ...>\n"
+                "TAGS: <3-7 comma-separated tags covering the 5 dimensions below>\n"
+                "\n"
+                "=== 5 CAPTION DIMENSIONS (include in this order) ===\n"
+                "1. Genre / Era: e.g. J-POP, 80s synth pop, jazz ballad, cinematic orchestral\n"
+                "2. Key instruments: e.g. piano, acoustic guitar, synth, strings, brass\n"
+                "3. Mood / adjective: e.g. emotional, uplifting, dark, dreamy, energetic\n"
+                "4. Tempo feel: e.g. slow tempo, mid-tempo, fast-paced, groovy (optional if obvious)\n"
+                "5. Vocal type: e.g. female vocal, male vocal, powerful, whisper, no vocals (optional)\n"
+                "\n"
+                "=== RULES ===\n"
+                "- 3-7 tags is the sweet spot. Never exceed 10.\n"
+                "- Do NOT include BPM numbers, key signatures, or time signatures in TAGS (those are set separately).\n"
+                "- Avoid contradictions: don't combine 'upbeat' + 'melancholic', or 'ambient' + 'metal'.\n"
+                "- Prefer tags that imply a quick start for video use, such as direct opening / short intro / early hook.\n"
+                "- Avoid long-intro cues like ambient intro, cinematic slow build, or extended instrumental opening unless the lyrics clearly require it.\n"
+                "- Write tags in English for best ACE-Step compatibility.\n"
+                "- No explanations. Output GENRE and TAGS lines only."
+            )
 
         try:
             response = await chat_req(
                 client,
-                f"Analyze these lyrics and suggest the best Caption tags for ACE-Step 1.5 music generation:\n\n{lyrics[:2000]}",
+                (
+                    "Analyze these lyrics and generate an ACE-Step 1.5 Caption aligned with the prompt guide. "
+                    "Keep the caption consistent with the lyrics world, emotion, and likely structure.\n\n"
+                    if use_ace_step_doc_guidance else
+                    "Analyze these lyrics and suggest the best Caption tags for ACE-Step 1.5 music generation:\n\n"
+                ) + lyrics[:2000],
                 system_role,
                 temperature=0.3,
                 max_tokens=1000,
@@ -2762,6 +3470,107 @@ async def execute_utility_job(job: Job) -> Dict[str, Any]:
                 "tags": tags,
                 "raw_response": f"fallback: {type(exc).__name__}: {str(exc)}",
             }
+
+    if workflow == "duration_plan_generate":
+        target_duration = float(req.target_duration_sec or 0)
+        if target_duration <= 0:
+            raise RuntimeError("duration_plan_generate requires 'target_duration_sec'")
+        min_scene_sec = max(1, int(req.min_scene_sec or 2))
+        max_scene_sec = max(min_scene_sec, int(req.max_scene_sec or 7))
+        min_count_by_duration = max(1, int(math.ceil(target_duration / max_scene_sec)))
+        max_count_by_duration = max(min_count_by_duration, int(math.floor(target_duration / min_scene_sec)))
+        max_count_by_duration = min(50, max_count_by_duration)
+        fallback_scene_count = max(1, min(50, int(req.scene_count or 1)))
+        fallback_scene_count = max(min_count_by_duration, min(max_count_by_duration, fallback_scene_count))
+        propose_scene_count = bool(req.propose_scene_count)
+        await job_manager.update(job, progress=0.25, message="Planning natural scene durations")
+
+        scenario = str(req.scenario or "").strip()
+        lyrics = str(req.lyrics or "").strip()
+        source_text = scenario or lyrics
+        if not source_text:
+            durations = _fallback_duration_plan(fallback_scene_count, target_duration, min_scene_sec, max_scene_sec)
+            return {
+                "scene_count": fallback_scene_count,
+                "scene_durations_sec": durations,
+                "target_duration_sec": target_duration,
+                "raw_response": "fallback: empty source",
+            }
+
+        system_role = (
+            "You are a music-video editor deciding how long each scene should naturally last. "
+            "Estimate RELATIVE scene durations from story/lyrics characteristics first, then output JSON only. "
+            "Longer durations fit establishing shots, emotional pauses, dance phrases, or gradual reveals. "
+            "Shorter durations fit transitions, punchy beats, quick reactions, or brief inserts. "
+            "Do not force all scenes to the same length unless the content truly demands it."
+        )
+        user_message = (
+            "Return JSON only. "
+            + (
+                "Use format: {\"scene_count\": N, \"durations\": [n1, n2, ...]}\n"
+                if propose_scene_count else
+                "Use format: {\"durations\": [n1, n2, ...]}\n"
+            )
+            + (
+                f"Choose a natural scene count between {min_count_by_duration} and {max_count_by_duration}.\n"
+                if propose_scene_count else
+                f"Scene count: {fallback_scene_count}\n"
+            )
+            +
+            f"Target total duration seconds: {int(round(target_duration))}\n"
+            f"Allowed per-scene duration range: {min_scene_sec} to {max_scene_sec} seconds\n"
+            "Task: propose natural relative durations for each scene before final normalization. "
+            "Use varied values when the scene characteristics differ.\n\n"
+            f"SCENARIO:\n{scenario or '(none)'}\n\n"
+            f"LYRICS:\n{lyrics or '(none)'}"
+        )
+
+        response = ""
+        proposed: list[Any] = []
+        proposed_scene_count: Optional[int] = None
+        try:
+            client = get_openai_client()
+            response = await chat_req(
+                client,
+                user_message,
+                system_role,
+                temperature=0.3,
+                max_tokens=1200,
+                repeat_penalty=1.08,
+            )
+            text = str(response or "").strip()
+            code_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+            json_text = code_match.group(1) if code_match else text
+            data = json.loads(json_text)
+            if isinstance(data, dict):
+                proposed = list(data.get("durations") or [])
+                if data.get("scene_count") is not None:
+                    try:
+                        proposed_scene_count = int(data.get("scene_count"))
+                    except Exception:
+                        proposed_scene_count = None
+        except Exception as exc:
+            response = f"fallback: {type(exc).__name__}: {str(exc)}"
+
+        chosen_scene_count = fallback_scene_count
+        if propose_scene_count and proposed_scene_count is not None:
+            chosen_scene_count = max(min_count_by_duration, min(max_count_by_duration, int(proposed_scene_count)))
+
+        durations = _normalize_duration_plan(
+            proposed=proposed,
+            scene_count=chosen_scene_count,
+            target_duration_sec=target_duration,
+            min_scene_sec=min_scene_sec,
+            max_scene_sec=max_scene_sec,
+        )
+        return {
+            "scene_count": chosen_scene_count,
+            "scene_durations_sec": durations,
+            "target_duration_sec": target_duration,
+            "scene_count_bounds": [min_count_by_duration, max_count_by_duration],
+            "raw_durations_sec": proposed,
+            "raw_response": response,
+        }
 
     if workflow == "spec_generate":
         mode = str(req.spec_mode or "m2v").strip().lower()
@@ -3165,6 +3974,7 @@ async def utility(request: UtilityRequest):
         "video_audio_merge",
         "scenario_generate",
         "prompt_generate",
+        "duration_plan_generate",
         "lyrics_generate",
         "lyrics_to_tags",
         "spec_generate",

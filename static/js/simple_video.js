@@ -623,6 +623,7 @@ let simpleVideoForcePromptRegeneration = false;
 let simpleVideoContinueGateResolver = null;
 let simpleVideoContinueGateActive = false;
 let simpleVideoContinueGateRestartM2V = false;
+const SIMPLE_VIDEO_MAX_SCENES = 50;
 
 const SimpleVideoUI = {
     initialized: false,
@@ -636,6 +637,9 @@ const SimpleVideoUI = {
         // Defaults per spec
         sceneCount: '3',
         sceneLengthSec: '5',
+        m2vUseFixedSceneLength: false,
+        m2vUseLLMSceneCount: false,
+        m2vAdjustToAudioLength: false,
         // Derived (sceneCount x sceneLengthSec); kept for back-compat but not user-editable.
         totalLengthSec: 15,
         // 'auto' | '<width>x<height>' (e.g. '1280x720')
@@ -875,6 +879,9 @@ function loadSimpleVideoState() {
             // Back-compat: if old state used 'auto', coerce to defaults.
             SimpleVideoUI.state.sceneCount = (parsed.sceneCount && parsed.sceneCount !== 'auto') ? String(parsed.sceneCount) : '3';
             SimpleVideoUI.state.sceneLengthSec = (parsed.sceneLengthSec && parsed.sceneLengthSec !== 'auto') ? String(parsed.sceneLengthSec) : '5';
+            SimpleVideoUI.state.m2vUseFixedSceneLength = !!parsed.m2vUseFixedSceneLength;
+            SimpleVideoUI.state.m2vUseLLMSceneCount = !!parsed.m2vUseLLMSceneCount;
+            SimpleVideoUI.state.m2vAdjustToAudioLength = !!parsed.m2vAdjustToAudioLength;
             // Keep saved totalLengthSec for compat, but will be overwritten by derived length on UI update.
             SimpleVideoUI.state.totalLengthSec = normalizeTotalLengthSec(parsed.totalLengthSec);
             SimpleVideoUI.state.videoSize = normalizeVideoSize(parsed.videoSize);
@@ -1439,6 +1446,9 @@ function saveSimpleVideoState() {
             scenario: SimpleVideoUI.state.scenario,
             sceneCount: SimpleVideoUI.state.sceneCount,
             sceneLengthSec: SimpleVideoUI.state.sceneLengthSec,
+            m2vUseFixedSceneLength: !!SimpleVideoUI.state.m2vUseFixedSceneLength,
+            m2vUseLLMSceneCount: !!SimpleVideoUI.state.m2vUseLLMSceneCount,
+            m2vAdjustToAudioLength: !!SimpleVideoUI.state.m2vAdjustToAudioLength,
             totalLengthSec: SimpleVideoUI.state.totalLengthSec,
             videoSize: SimpleVideoUI.state.videoSize,
             customSize: SimpleVideoUI.state.customSize,
@@ -2027,10 +2037,7 @@ function renderSimpleVideoUI() {
             <div class="simple-video-settings-row">
                 <div class="simple-video-title-inline-field" aria-label="シーン数">
                     <span>シーン数</span>
-                    <select class="simple-video-select" id="simpleVideoSceneCount">
-                        <option value="3" selected>3</option>
-                        ${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join('')}
-                    </select>
+                    <input class="simple-video-select" id="simpleVideoSceneCount" type="number" min="1" max="50" step="1" value="3" style="min-width:90px;" />
                 </div>
                 <div class="simple-video-title-inline-field" aria-label="シーン長さ">
                     <span>⏱️長さ(秒)</span>
@@ -2043,6 +2050,24 @@ function renderSimpleVideoUI() {
                         <option value="10">10秒（LTX）</option>
                         <option value="13">13秒（LTX）</option>
                     </select>
+                </div>
+                <div class="simple-video-title-inline-field" aria-label="M2V長さ固定">
+                    <label class="simple-video-checkbox-label" title="M2V時に入力したシーン長からシーン数を自動計算します。通常は各シーンをその秒数に保ち、必要に応じて末尾だけ短くします。" style="gap:6px;">
+                        <input type="checkbox" id="simpleVideoM2VFixedLengthCheck" />
+                        <span>長さ固定</span>
+                    </label>
+                </div>
+                <div class="simple-video-title-inline-field" aria-label="M2Vシーン数提案">
+                    <label class="simple-video-checkbox-label" title="自動配分時に、シーン数もLLMに提案させます。OFFならシーン数はルールベースで決め、各シーン秒数だけをLLMが提案します。" style="gap:6px;">
+                        <input type="checkbox" id="simpleVideoM2VLLMSceneCountCheck" />
+                        <span>LLMがシーン数提案</span>
+                    </label>
+                </div>
+                <div class="simple-video-title-inline-field" aria-label="M2V音源尺合わせ">
+                    <label class="simple-video-checkbox-label" title="M2V最終合成時に末尾を調整して音源長にぴったり合わせます。OFFなら最終フレームを調整せず、動画が音源より長い場合は末尾が無音になります。" style="gap:6px;">
+                        <input type="checkbox" id="simpleVideoM2VAdjustToAudioCheck" />
+                        <span>音源尺に合わせる</span>
+                    </label>
                 </div>
                 <div class="simple-video-title-inline-field" aria-label="動画長">
                     <span>📹合計</span>
@@ -2080,6 +2105,11 @@ function renderSimpleVideoUI() {
                     </select>
                 </div>
             </div>
+
+            <div class="simple-video-hint" style="margin:4px 0 0;">
+                M2V設定メモ: 「長さ固定」ON は選択秒数からシーン数を計算します。OFF は自動配分です。さらに「LLMがシーン数提案」ON で、LLM が自然なシーン数も提案します。「音源尺に合わせる」ON で最終動画を音源長に合わせます。
+            </div>
+            <div class="simple-video-hint" id="simpleVideoDurationPlanHint" style="display:none; margin:4px 0 0;">-</div>
 
             <div class="simple-video-hint" id="simpleVideoI2IRefRoleHint" style="display:none;">画像リファイン（I2I）で「参照画像」を何として扱うかを選択します。キャラ一貫性は人物/服/髪などを固定しやすく、雰囲気維持は画調/ライティング/色を固定しやすい。</div>
             <div class="simple-video-hint" id="simpleVideoCurrentRefHint">参照: -</div>
@@ -3270,7 +3300,13 @@ function attachSimpleVideoEventListeners() {
     const sceneCountSel = document.getElementById('simpleVideoSceneCount');
     if (sceneCountSel) {
         sceneCountSel.addEventListener('change', (e) => {
-            SimpleVideoUI.state.sceneCount = e.target.value;
+            const raw = Math.round(Number(e.target.value) || 3);
+            const normalized = String(Math.min(SIMPLE_VIDEO_MAX_SCENES, Math.max(1, raw)));
+            e.target.value = normalized;
+            SimpleVideoUI.state.sceneCount = normalized;
+            if (!SimpleVideoUI.state.m2vIsRunning) {
+                SimpleVideoUI.state.m2vDurationPlan = null;
+            }
             updateSimpleVideoDerivedTotalLength();
             saveSimpleVideoState();
             // Update thumbnail grid when scene count changes
@@ -3282,7 +3318,42 @@ function attachSimpleVideoEventListeners() {
     if (sceneLengthSel) {
         sceneLengthSel.addEventListener('change', (e) => {
             SimpleVideoUI.state.sceneLengthSec = e.target.value;
+            if (!SimpleVideoUI.state.m2vIsRunning) {
+                SimpleVideoUI.state.m2vDurationPlan = null;
+            }
             updateSimpleVideoDerivedTotalLength();
+            saveSimpleVideoState();
+        });
+    }
+
+    const m2vFixedLengthCheck = document.getElementById('simpleVideoM2VFixedLengthCheck');
+    if (m2vFixedLengthCheck) {
+        m2vFixedLengthCheck.addEventListener('change', (e) => {
+            SimpleVideoUI.state.m2vUseFixedSceneLength = !!e.target.checked;
+            if (!SimpleVideoUI.state.m2vIsRunning) {
+                SimpleVideoUI.state.m2vDurationPlan = null;
+            }
+            updateSimpleVideoDerivedTotalLength();
+            saveSimpleVideoState();
+        });
+    }
+
+    const m2vLLMSceneCountCheck = document.getElementById('simpleVideoM2VLLMSceneCountCheck');
+    if (m2vLLMSceneCountCheck) {
+        m2vLLMSceneCountCheck.addEventListener('change', (e) => {
+            SimpleVideoUI.state.m2vUseLLMSceneCount = !!e.target.checked;
+            if (!SimpleVideoUI.state.m2vIsRunning) {
+                SimpleVideoUI.state.m2vDurationPlan = null;
+            }
+            updateSimpleVideoDerivedTotalLength();
+            saveSimpleVideoState();
+        });
+    }
+
+    const m2vAdjustToAudioCheck = document.getElementById('simpleVideoM2VAdjustToAudioCheck');
+    if (m2vAdjustToAudioCheck) {
+        m2vAdjustToAudioCheck.addEventListener('change', (e) => {
+            SimpleVideoUI.state.m2vAdjustToAudioLength = !!e.target.checked;
             saveSimpleVideoState();
         });
     }
@@ -3362,6 +3433,9 @@ function attachSimpleVideoEventListeners() {
             // Reset to default values
             SimpleVideoUI.state.sceneCount = '3';
             SimpleVideoUI.state.sceneLengthSec = '5';
+            SimpleVideoUI.state.m2vUseFixedSceneLength = false;
+            SimpleVideoUI.state.m2vUseLLMSceneCount = false;
+            SimpleVideoUI.state.m2vAdjustToAudioLength = false;
             SimpleVideoUI.state.totalLengthSec = 15;
             SimpleVideoUI.state.videoSize = 'auto';
             SimpleVideoUI.state.customSize = { width: '', height: '' };
@@ -4080,7 +4154,7 @@ function getEffectiveI2IRefRole() {
 function getEffectiveSceneCountForPromptGeneration() {
     const { state } = SimpleVideoUI;
     const explicit = Number(state.sceneCount);
-    let count = (Number.isFinite(explicit) && explicit >= 1) ? Math.min(24, Math.max(1, Math.round(explicit))) : 3;
+    let count = (Number.isFinite(explicit) && explicit >= 1) ? Math.min(SIMPLE_VIDEO_MAX_SCENES, Math.max(1, Math.round(explicit))) : 3;
 
     // FLF-only and mixed-transition presets need N+1 images (and thus N+1 prompts).
     // The extra prompt is for the "ending" image that serves as the end frame of the last FLF segment.
@@ -4097,6 +4171,33 @@ function updateSimpleVideoDerivedTotalLength() {
     const count = Number(state.sceneCount);
     const per = Number(state.sceneLengthSec);
     const totalEl = document.getElementById('simpleVideoTotalLengthDisplay');
+    const planHintEl = document.getElementById('simpleVideoDurationPlanHint');
+    const plan = Array.isArray(state.m2vDurationPlan)
+        ? state.m2vDurationPlan.map((v) => Math.max(1, Math.round(Number(v) || 0))).filter((v) => Number.isFinite(v) && v > 0)
+        : [];
+
+    if (planHintEl) {
+        if (plan.length > 0) {
+            const planTotal = plan.reduce((sum, v) => sum + v, 0);
+            const detail = plan.map((sec, idx) => `S${idx + 1}:${sec}秒`).join(' / ');
+            const isFixed = !!state.m2vUseFixedSceneLength;
+            const note = isFixed
+                ? (state.m2vIsRunning ? 'M2V固定尺モード' : '直近のM2V固定尺配分')
+                : (state.m2vIsRunning ? 'M2V自動配分' : '直近のM2V配分');
+            planHintEl.textContent = `${note}: ${detail} （合計 ${planTotal}秒）`;
+            planHintEl.style.display = '';
+        } else {
+            planHintEl.textContent = '-';
+            planHintEl.style.display = 'none';
+        }
+    }
+
+    if (plan.length > 0) {
+        const total = plan.reduce((sum, v) => sum + v, 0);
+        state.totalLengthSec = normalizeTotalLengthSec(total);
+        if (totalEl) totalEl.textContent = `${total}秒`;
+        return;
+    }
 
     if (Number.isFinite(count) && count > 0 && Number.isFinite(per) && per > 0) {
         const total = Math.round(count * per);
@@ -4588,10 +4689,15 @@ async function generateSimpleVideoPrompts() {
         }
 
         // Extract per-scene transition types from LLM (Phase 2)
-        const transitions = extractTransitionsFromPromptGenerateResult(result);
-        if (transitions) {
-            state.sceneTransitions = transitions;
-            console.log('[SimpleVideo] LLM transition types:', transitions);
+        let transitions = extractTransitionsFromPromptGenerateResult(result);
+        if (preset?.mixedTransitions && transitions) {
+            transitions = rebalanceMixedSequenceTransitions(transitions, prompts);
+        }
+        state.sceneTransitions = Array.isArray(transitions) && transitions.length > 0
+            ? transitions
+            : null;
+        if (state.sceneTransitions) {
+            console.log('[SimpleVideo] LLM transition types:', state.sceneTransitions);
         }
         saveSimpleVideoState();
         renderTransitionEditor();
@@ -4990,6 +5096,14 @@ function buildMoodAlignedT2ASettings({ scenarioText, imagePromptText, lyricsText
             if (!lower.includes(token)) {
                 nextTags = nextTags ? `${nextTags}, ${token}` : token;
             }
+        }
+    }
+
+    const quickStartBoosts = ['direct opening', 'short intro', 'early hook'];
+    for (const token of quickStartBoosts) {
+        const lower = nextTags.toLowerCase();
+        if (!lower.includes(token)) {
+            nextTags = nextTags ? `${nextTags}, ${token}` : token;
         }
     }
 
@@ -7420,6 +7534,18 @@ function updateSimpleVideoUI() {
     if (sceneLengthSel) {
         try { sceneLengthSel.value = String(state.sceneLengthSec || '5'); } catch (_e) {}
     }
+    const m2vFixedLengthCheck = document.getElementById('simpleVideoM2VFixedLengthCheck');
+    if (m2vFixedLengthCheck) {
+        try { m2vFixedLengthCheck.checked = !!state.m2vUseFixedSceneLength; } catch (_e) {}
+    }
+    const m2vLLMSceneCountCheck = document.getElementById('simpleVideoM2VLLMSceneCountCheck');
+    if (m2vLLMSceneCountCheck) {
+        try { m2vLLMSceneCountCheck.checked = !!state.m2vUseLLMSceneCount; } catch (_e) {}
+    }
+    const m2vAdjustToAudioCheck = document.getElementById('simpleVideoM2VAdjustToAudioCheck');
+    if (m2vAdjustToAudioCheck) {
+        try { m2vAdjustToAudioCheck.checked = !!state.m2vAdjustToAudioLength; } catch (_e) {}
+    }
 
     updateSimpleVideoDerivedTotalLength();
     renderSimpleVideoM2VSourceUI();
@@ -9128,21 +9254,90 @@ function allocateM2VSceneDurations(audioSec, sceneCount, options = {}) {
     let target = Math.round(Number(audioSec) || baseSec * count);
     target = Math.min(maxTotal, Math.max(minTotal, target));
 
+    // Add gentle duration variation while preserving the total so that
+    // auto-allocation does not collapse into identical scene lengths too often.
+    // Example around a 5s base: 4,5,6,4,5,6 ... within min/max bounds.
+    if (count >= 2 && maxSec > minSec) {
+        const pairBudget = Math.max(1, Math.floor((maxSec - minSec) / 2));
+        let left = 0;
+        let right = count - 1;
+        let swing = 1;
+        while (left < right) {
+            const dec = left;
+            const inc = right;
+            const decRoom = durations[dec] - minSec;
+            const incRoom = maxSec - durations[inc];
+            const shift = Math.max(0, Math.min(swing, decRoom, incRoom, pairBudget));
+            if (shift > 0) {
+                durations[dec] -= shift;
+                durations[inc] += shift;
+            }
+            left += 1;
+            right -= 1;
+            swing = (swing % pairBudget) + 1;
+        }
+    }
+
     let delta = target - durations.reduce((sum, v) => sum + v, 0);
     let index = 0;
+    const growthOrder = Array.from({ length: count }, (_, i) => i).sort((a, b) => {
+        const da = Math.abs(a - ((count - 1) / 2));
+        const db = Math.abs(b - ((count - 1) / 2));
+        return da - db;
+    });
+    const shrinkOrder = Array.from({ length: count }, (_, i) => i).sort((a, b) => {
+        const da = Math.abs(a - ((count - 1) / 2));
+        const db = Math.abs(b - ((count - 1) / 2));
+        return db - da;
+    });
     while (delta !== 0) {
         if (delta > 0) {
-            if (durations[index] < maxSec) {
-                durations[index] += 1;
+            const targetIndex = growthOrder[index % growthOrder.length];
+            if (durations[targetIndex] < maxSec) {
+                durations[targetIndex] += 1;
                 delta -= 1;
             }
         } else {
-            if (durations[index] > minSec) {
-                durations[index] -= 1;
+            const targetIndex = shrinkOrder[index % shrinkOrder.length];
+            if (durations[targetIndex] > minSec) {
+                durations[targetIndex] -= 1;
                 delta += 1;
             }
         }
         index = (index + 1) % count;
+    }
+
+    return durations;
+}
+
+function allocateFixedM2VSceneDurations(totalSec, preferredSceneSec, options = {}) {
+    const minSec = Number.isFinite(options.minSec) ? Number(options.minSec) : 2;
+    const maxSec = Number.isFinite(options.maxSec) ? Number(options.maxSec) : 7;
+    const minSceneCount = Number.isFinite(options.minSceneCount) ? Math.max(1, Math.round(Number(options.minSceneCount))) : 1;
+    const maxSceneCount = Number.isFinite(options.maxSceneCount) ? Math.max(minSceneCount, Math.round(Number(options.maxSceneCount))) : SIMPLE_VIDEO_MAX_SCENES;
+    const preferred = Math.min(maxSec, Math.max(minSec, Math.round(Number(preferredSceneSec) || 5)));
+    const total = Math.max(minSceneCount * minSec, Math.round(Number(totalSec) || preferred));
+
+    let count = Math.ceil(total / preferred);
+    count = Math.max(minSceneCount, Math.min(maxSceneCount, count));
+
+    const durations = Array.from({ length: count }, () => preferred);
+    let delta = durations.reduce((sum, v) => sum + v, 0) - total;
+    let index = count - 1;
+
+    while (delta > 0) {
+        if (durations[index] > minSec) {
+            durations[index] -= 1;
+            delta -= 1;
+        }
+        index = (index - 1 + count) % count;
+        if (!durations.some((v) => v > minSec)) break;
+    }
+
+    while (delta < 0) {
+        durations[index] += 1;
+        delta += 1;
+        index = (index - 1 + count) % count;
     }
 
     return durations;
@@ -9177,7 +9372,12 @@ async function mergeM2VAudioWithCurrentVideo(videoFilename) {
         setSimpleVideoProgress('🔗 音楽追加: 開始...', 0.01);
 
         const merged = await runSimpleVideoUtilityJob({
-            requestBody: { workflow: 'video_audio_merge', video: mergeVideo, audio: mergeAudio },
+            requestBody: {
+                workflow: 'video_audio_merge',
+                video: mergeVideo,
+                audio: mergeAudio,
+                preserve_video_length: !state.m2vAdjustToAudioLength,
+            },
             progressPrefix: '🔗 音楽追加',
             cancelSeqAtStart: Number(state.cancelSeq) || 0,
         });
@@ -9382,6 +9582,28 @@ function buildM2VFallbackPromptOverride({ lyricsText, sceneDurationsSec, targetD
     }
     lines.push('Generate self-contained scene prompts aligned with each scene duration. Re-state character/setting details in every prompt; never reference other scenes.');
     return lines.join('\n');
+}
+
+async function prepareM2VDurationPlan({ scenarioText, lyricsText, sceneCount, targetDurationSec, minSceneSec, maxSceneSec, proposeSceneCount = false, cancelSeqAtStart }) {
+    const result = await runSimpleVideoUtilityResultJob({
+        requestBody: {
+            workflow: 'duration_plan_generate',
+            scenario: String(scenarioText || ''),
+            lyrics: String(lyricsText || ''),
+            scene_count: Math.max(1, Math.round(Number(sceneCount) || 1)),
+            target_duration_sec: Number.isFinite(Number(targetDurationSec)) ? Number(targetDurationSec) : null,
+            min_scene_sec: Math.max(1, Math.round(Number(minSceneSec) || 2)),
+            max_scene_sec: Math.max(1, Math.round(Number(maxSceneSec) || 7)),
+            propose_scene_count: !!proposeSceneCount,
+        },
+        progressPrefix: '⏱️ M2V尺計画',
+        cancelSeqAtStart,
+    });
+    const durations = Array.isArray(result?.result?.scene_durations_sec)
+        ? result.result.scene_durations_sec.map((v) => Math.max(1, Math.round(Number(v) || 0))).filter((v) => Number.isFinite(v) && v > 0)
+        : [];
+    const resolvedSceneCount = Math.max(1, Math.round(Number(result?.result?.scene_count) || durations.length || sceneCount || 1));
+    return { sceneCount: resolvedSceneCount, durations };
 }
 
 async function prepareM2VPromptSpec({ scenarioText, lyricsText, sceneDurationsSec, targetDurationSec, cancelSeqAtStart }) {
@@ -9598,18 +9820,78 @@ async function startSimpleVideoMusicToVideo() {
         }
 
         const roundedAudioSec = Math.max(1, Math.round(audioDuration));
-        const autoSceneCount = Math.max(1, Math.round(roundedAudioSec / 5));
+        const targetVideoDurationSec = roundedAudioSec;
         const minSceneCountForPreset = (preset?.flfOnly || preset?.mixedTransitions) ? 2 : 1;
-        const currentSceneCount = Math.max(minSceneCountForPreset, Math.min(24, autoSceneCount));
-        const durations = allocateM2VSceneDurations(audioDuration, currentSceneCount, { minSec: 2, baseSec: 5, maxSec: 7 });
+        const durationPlanSteps = getEffectivePresetStepsForCurrentOptions(preset);
+        const usesLTX = durationPlanSteps.some((step) => String(normalizeWorkflowAlias(step?.workflow) || '').startsWith('ltx2_'));
+        const maxSceneSec = usesLTX ? 13 : 7;
+        const preferredSceneLengthSec = Math.min(maxSceneSec, Math.max(2, Math.round(Number(state.sceneLengthSec) || 5)));
+        const useFixedSceneLength = !!state.m2vUseFixedSceneLength;
+        const useLLMSceneCount = !useFixedSceneLength && !!state.m2vUseLLMSceneCount;
+        let durations = [];
+        let currentSceneCount = minSceneCountForPreset;
+
+        if (useFixedSceneLength) {
+            durations = allocateFixedM2VSceneDurations(targetVideoDurationSec, preferredSceneLengthSec, {
+                minSec: 2,
+                maxSec: maxSceneSec,
+                minSceneCount: minSceneCountForPreset,
+                maxSceneCount: SIMPLE_VIDEO_MAX_SCENES,
+            });
+            currentSceneCount = Math.max(minSceneCountForPreset, Math.min(SIMPLE_VIDEO_MAX_SCENES, durations.length));
+        } else {
+            const autoSceneBaseSec = usesLTX
+                ? Math.min(maxSceneSec, Math.max(preferredSceneLengthSec, 8))
+                : Math.min(maxSceneSec, Math.max(preferredSceneLengthSec, 5));
+            const autoSceneCount = Math.max(1, Math.round(targetVideoDurationSec / Math.max(2, autoSceneBaseSec)));
+            currentSceneCount = Math.max(minSceneCountForPreset, Math.min(SIMPLE_VIDEO_MAX_SCENES, autoSceneCount));
+            try {
+                setSimpleVideoProgressVisible(true);
+                setSimpleVideoProgress(
+                    useLLMSceneCount
+                        ? '⏱️ M2V尺計画: LLMでシーン数とシーン尺を計画中...'
+                        : '⏱️ M2V尺計画: LLMでシーン尺を計画中...',
+                    0.01
+                );
+                const durationPlan = await prepareM2VDurationPlan({
+                    scenarioText: String(state.scenario || ''),
+                    lyricsText: String(state.t2aLyrics || ''),
+                    sceneCount: currentSceneCount,
+                    targetDurationSec: targetVideoDurationSec,
+                    minSceneSec: 2,
+                    maxSceneSec: maxSceneSec,
+                    proposeSceneCount: useLLMSceneCount,
+                    cancelSeqAtStart: Number(state.cancelSeq) || 0,
+                });
+                durations = Array.isArray(durationPlan?.durations) ? durationPlan.durations : [];
+                if (!Array.isArray(durations) || durations.length <= 0) {
+                    throw new Error('empty duration plan');
+                }
+                const plannedSceneCount = Math.max(1, Math.round(Number(durationPlan?.sceneCount) || durations.length || currentSceneCount));
+                currentSceneCount = Math.max(minSceneCountForPreset, Math.min(SIMPLE_VIDEO_MAX_SCENES, plannedSceneCount));
+            } catch (durationPlanError) {
+                console.warn('[SimpleVideo] M2V duration planning failed; falling back to rule-based allocation:', durationPlanError);
+                durations = allocateM2VSceneDurations(targetVideoDurationSec, currentSceneCount, { minSec: 2, baseSec: autoSceneBaseSec, maxSec: maxSceneSec });
+                if (typeof showToast === 'function') {
+                    showToast(`M2V尺計画に失敗したため自動配分で継続します: ${String(durationPlanError?.message || durationPlanError)}`, 'warning');
+                }
+            }
+        }
         const avg = Math.round(durations.reduce((sum, v) => sum + v, 0) / Math.max(1, durations.length));
-        const fixedSceneLength = Math.min(7, Math.max(2, avg));
+        const fixedSceneLength = Math.min(maxSceneSec, Math.max(2, avg));
 
         state.sceneCount = String(currentSceneCount);
-        state.sceneLengthSec = String(fixedSceneLength);
+        if (!useFixedSceneLength) {
+            state.sceneLengthSec = String(fixedSceneLength);
+        }
         state.m2vDurationPlan = durations.slice();
         saveSimpleVideoState();
         updateSimpleVideoUI();
+
+        // A fresh M2V run can change the scene count.
+        // Clear the previous generated prompt/transition list immediately so
+        // the transition editor does not keep showing the old length.
+        clearSimpleVideoGeneratedPrompts();
 
         const preparedImageFilenameForM2V = String(state.preparedVideoInitialImage?.filename || '').trim();
         const desiredCountForM2V = (preset?.flfOnly || preset?.mixedTransitions) ? (currentSceneCount + 1) : currentSceneCount;
@@ -9629,7 +9911,7 @@ async function startSimpleVideoMusicToVideo() {
                 scenarioText: String(state.scenario || ''),
                 lyricsText: String(state.t2aLyrics || ''),
                 sceneDurationsSec: durations,
-                targetDurationSec: audioDuration,
+                targetDurationSec: targetVideoDurationSec,
                 cancelSeqAtStart: Number(state.cancelSeq) || 0,
             });
             const overrideText = buildM2VPromptFromSpec(m2vSpec);
@@ -9643,7 +9925,7 @@ async function startSimpleVideoMusicToVideo() {
             simpleVideoM2VPromptOverride = buildM2VFallbackPromptOverride({
                 lyricsText: String(state.t2aLyrics || ''),
                 sceneDurationsSec: durations,
-                targetDurationSec: audioDuration,
+                targetDurationSec: targetVideoDurationSec,
                 language: mapSimpleVideoT2ALanguageToLyricsLanguage(state.t2aLanguage),
             });
             simpleVideoForcePromptRegeneration = !!String(simpleVideoM2VPromptOverride || '').trim();
@@ -9665,14 +9947,19 @@ async function startSimpleVideoMusicToVideo() {
         saveSimpleVideoState();
 
         setSimpleVideoProgressVisible(true);
-        setSimpleVideoProgress(`🎬 M2V: 動画生成を開始（音源 ${formatSimpleVideoDuration(audioDuration)} / ${currentSceneCount}シーン）`, 0.02);
+        const durationModeLabel = useFixedSceneLength
+            ? `固定尺 ${preferredSceneLengthSec}秒`
+            : (useLLMSceneCount ? '自動配分 + LLMシーン数提案' : '自動配分');
+        const endAdjustLabel = state.m2vAdjustToAudioLength ? '末尾調整あり' : '末尾調整なし';
+        setSimpleVideoProgress(`🎬 M2V: 動画生成を開始（音源 ${formatSimpleVideoDuration(audioDuration)} / 映像計画 ${targetVideoDurationSec}秒 / ${currentSceneCount}シーン / ${durationModeLabel} / ${endAdjustLabel}）`, 0.02);
 
         // Require a freshly generated video for this M2V run.
         state.v2mGeneratedVideo = null;
         saveSimpleVideoState();
         renderSimpleVideoV2MSourceUI();
 
-        await startGeneration();
+        const generationCompleted = await startGeneration();
+        if (!generationCompleted) return;
 
         const generatedVideo = state.v2mGeneratedVideo?.filename
             ? state.v2mGeneratedVideo
@@ -9691,7 +9978,12 @@ async function startSimpleVideoMusicToVideo() {
         }
 
         const merged = await runSimpleVideoUtilityJob({
-            requestBody: { workflow: 'video_audio_merge', video: mergeVideo, audio: mergeAudio },
+            requestBody: {
+                workflow: 'video_audio_merge',
+                video: mergeVideo,
+                audio: mergeAudio,
+                preserve_video_length: !state.m2vAdjustToAudioLength,
+            },
             progressPrefix: '🔗 M2V最終合成',
             cancelSeqAtStart: Number(state.cancelSeq) || 0,
         });
@@ -9998,6 +10290,39 @@ async function confirmContinueAfterIntermediateImages({ preset, generatedCount, 
     if (!ok) {
         setSimpleVideoProgress('⏸ 中間画像確認で停止しました（必要シーンを再生成後、再実行してください）', 0.35);
         if (typeof showToast === 'function') showToast('中間画像確認で停止しました。必要シーンを再生成して再実行してください', 'info');
+    }
+    simpleVideoContinueGateActive = false;
+    setSimpleVideoContinueGateVisible(false);
+    updateGenerateButtonState();
+    return ok;
+}
+
+async function confirmContinueAfterPromptGeneration({ preset, promptCount }) {
+    const created = Math.max(0, Number(promptCount) || 0);
+    if (created <= 0) return true;
+
+    const gateWrap = document.getElementById('simpleVideoContinueGate');
+    const gateTextEl = document.getElementById('simpleVideoContinueGateText');
+    const continueBtn = document.getElementById('simpleVideoContinueBtn');
+    const pauseBtn = document.getElementById('simpleVideoPauseAtIntermediateBtn');
+    if (!gateWrap || !gateTextEl || !continueBtn || !pauseBtn) {
+        console.warn('[SimpleVideo] Continue gate UI is unavailable; proceeding without prompt confirmation');
+        return true;
+    }
+
+    const presetLabel = String(preset?.name || preset?.id || 'preset');
+    const msg = `📝 シーンプロンプト確認 (${presetLabel}) / 全${created}シーン。必要なら右側のシーンプロンプトを調整してから CONTINUE を押してください。`;
+    setSimpleVideoContinueGateVisible(true, msg);
+    simpleVideoContinueGateActive = true;
+    updateGenerateButtonState();
+
+    const ok = await new Promise((resolve) => {
+        simpleVideoContinueGateResolver = (value) => resolve(!!value);
+    });
+
+    if (!ok) {
+        setSimpleVideoProgress('⏸ シーンプロンプト確認で停止しました（必要なら編集後に再実行してください）', 0.18);
+        if (typeof showToast === 'function') showToast('シーンプロンプト確認で停止しました。必要なら編集して再実行してください', 'info');
     }
     simpleVideoContinueGateActive = false;
     setSimpleVideoContinueGateVisible(false);
@@ -11282,6 +11607,58 @@ function parseScenePromptsFromText(text) {
         .filter((line) => line.length > 0);
 }
 
+function rebalanceMixedSequenceTransitions(transitions, scenePrompts = []) {
+    const list = Array.isArray(transitions) ? transitions.map((v) => String(v || 'none').toLowerCase()) : [];
+    if (list.length <= 2) return list;
+
+    list[0] = 'none';
+    const boundaryCount = Math.max(0, list.length - 1);
+    if (boundaryCount <= 1) return list;
+
+    const cutCount = list.slice(1).filter((v) => v === 'cut').length;
+    if (cutCount <= Math.ceil(boundaryCount * 0.5)) return list;
+
+    const targetFlfCount = Math.max(1, Math.ceil(boundaryCount * 0.3));
+    let currentFlfCount = list.slice(1).filter((v) => v === 'flf').length;
+    if (currentFlfCount >= targetFlfCount) return list;
+
+    const hardBreakRe = /flashback|dream|memory|meanwhile|elsewhere|another location|different location|new location|time skip|later|next day|years later|act break|別の場所|場所が変わ|場面転換|回想|夢|記憶|翌日|数年後|時間経過|幕間/i;
+    const tokenize = (text) => {
+        const ascii = String(text || '').toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+        const cjk = String(text || '').replace(/\s+/g, '').match(/[\u3040-\u30ff\u3400-\u9fff]{2,}/g) || [];
+        return new Set([...ascii, ...cjk]);
+    };
+    const overlapScore = (a, b) => {
+        const ta = tokenize(a);
+        const tb = tokenize(b);
+        if (ta.size === 0 || tb.size === 0) return 0;
+        let shared = 0;
+        for (const token of ta) {
+            if (tb.has(token)) shared += 1;
+        }
+        return shared;
+    };
+
+    const candidates = [];
+    for (let i = 1; i < list.length; i++) {
+        if (list[i] !== 'cut') continue;
+        const prevPrompt = String(scenePrompts[i - 1] || '');
+        const nextPrompt = String(scenePrompts[i] || '');
+        const pairText = `${prevPrompt}\n${nextPrompt}`;
+        if (hardBreakRe.test(pairText)) continue;
+        candidates.push({ index: i, score: overlapScore(prevPrompt, nextPrompt) });
+    }
+
+    candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+    for (const candidate of candidates) {
+        if (currentFlfCount >= targetFlfCount) break;
+        list[candidate.index] = 'flf';
+        currentFlfCount += 1;
+    }
+
+    return list;
+}
+
 function buildScenePromptsFromScenarioText({ scenarioText, desiredCount }) {
     const scenarioPrompt = String(scenarioText || '').trim();
     const parsed = parseScenePromptsFromText(scenarioPrompt);
@@ -11323,6 +11700,23 @@ async function generateScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeqA
         presetId: preset?.id,
     });
     const sceneVariation = resolveScenarioVariationForCurrentPreset();
+    const fallbackSceneSeconds = Math.max(1, Number(state.sceneLengthSec) || 5);
+    const plannedSceneDurations = Array.isArray(state.m2vDurationPlan) && state.m2vDurationPlan.length > 0
+        ? state.m2vDurationPlan.map((v) => {
+            const n = Math.round(Number(v) || fallbackSceneSeconds);
+            return Math.max(1, n);
+        })
+        : [];
+    const sceneDurationsSec = Array.from({ length: sceneCount }, (_, idx) => {
+        const planned = Number(plannedSceneDurations[idx]);
+        if (Number.isFinite(planned) && planned > 0) return planned;
+        if (plannedSceneDurations.length > 0) {
+            const tail = Number(plannedSceneDurations[plannedSceneDurations.length - 1]);
+            if (Number.isFinite(tail) && tail > 0) return tail;
+        }
+        return fallbackSceneSeconds;
+    });
+    const targetDurationSec = sceneDurationsSec.reduce((sum, v) => sum + (Number(v) || 0), 0);
 
     // If LLM is disabled, copy scenario text as-is to each scene.
     if (!state.scenarioUseLLM && !hasM2VOverride) {
@@ -11355,6 +11749,8 @@ async function generateScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeqA
     };
     if (targetWorkflow) requestBody.target_workflow = targetWorkflow;
     if (flfMotionLevel) requestBody.flf_motion_level = flfMotionLevel;
+    requestBody.scene_durations_sec = sceneDurationsSec;
+    requestBody.target_duration_sec = targetDurationSec;
     // Pass generate_audio flag so LTX-2.3 prompt generation can adapt
     // (include audio descriptions only when audio generation is active)
     requestBody.generate_audio = !!state.generateAudio;
@@ -11400,10 +11796,15 @@ async function generateScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeqA
         }
 
         // Extract per-scene transition types from LLM (Phase 2)
-        const transitions = extractTransitionsFromPromptGenerateResult(result);
-        if (transitions) {
-            state.sceneTransitions = transitions;
-            console.log('[SimpleVideo] LLM transition types (auto):', transitions);
+        let transitions = extractTransitionsFromPromptGenerateResult(result);
+        if (preset?.mixedTransitions && transitions) {
+            transitions = rebalanceMixedSequenceTransitions(transitions, prompts);
+        }
+        state.sceneTransitions = Array.isArray(transitions) && transitions.length > 0
+            ? transitions
+            : null;
+        if (state.sceneTransitions) {
+            console.log('[SimpleVideo] LLM transition types (auto):', state.sceneTransitions);
         }
         saveSimpleVideoState();
         renderTransitionEditor();
@@ -12836,6 +13237,7 @@ async function determineScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeq
                     .join('\n');
 
                 state.llmPrompt = formatted;
+                state.sceneTransitions = null;
                 saveSimpleVideoState();
 
                 const llmPromptEl = document.getElementById('simpleVideoLLMPrompt');
@@ -12843,6 +13245,8 @@ async function determineScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeq
 
                 const promptsWrap = document.getElementById('simpleVideoGeneratedPromptsWrap');
                 if (promptsWrap) promptsWrap.style.display = '';
+
+                renderTransitionEditor();
             }
         }
     }
@@ -12891,10 +13295,13 @@ async function determineScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeq
                 .map((p, i) => `#${i + 1}: ${String(p || '').trim()}`)
                 .join('\n');
             state.llmPrompt = formatted;
+            state.sceneTransitions = null;
             saveSimpleVideoState();
 
             const llmPromptEl = document.getElementById('simpleVideoLLMPrompt');
             if (llmPromptEl) llmPromptEl.value = formatted;
+
+            renderTransitionEditor();
         }
     }
 
@@ -13153,8 +13560,20 @@ async function startGeneration() {
         const { width, height } = getEffectiveWH();
 
         const scenePrompts = await determineScenePromptsForCurrentSimpleVideoRun({ preset, cancelSeqAtStart });
+        if (state.m2vIsRunning) {
+            setSimpleVideoProgress('📝 シーンプロンプトを生成しました。内容確認後に CONTINUE してください', 0.16);
+            if (typeof showToast === 'function') showToast('シーンプロンプトを生成しました。確認後に CONTINUE してください', 'success');
+            const continueAfterPromptCheck = await confirmContinueAfterPromptGeneration({
+                preset,
+                promptCount: scenePrompts.length,
+            });
+            if (!continueAfterPromptCheck) return false;
+        }
 
         const fallbackSceneSeconds = Math.max(1, Number(state.sceneLengthSec) || 5);
+        const durationPlanSteps = getEffectivePresetStepsForCurrentOptions(preset);
+        const usesLTX = durationPlanSteps.some((step) => String(normalizeWorkflowAlias(step?.workflow) || '').startsWith('ltx2_'));
+        const maxSceneSeconds = usesLTX ? 13 : 7;
         const useM2VDurationPlan = !!(
             state.m2vIsRunning
             && Array.isArray(state.m2vDurationPlan)
@@ -13165,7 +13584,7 @@ async function startGeneration() {
             const idx = Math.max(0, Number(sceneIndex) || 0);
             const raw = Number(state.m2vDurationPlan[idx]);
             if (!Number.isFinite(raw) || raw <= 0) return fallbackSceneSeconds;
-            return Math.min(7, Math.max(2, Math.round(raw)));
+            return Math.min(maxSceneSeconds, Math.max(2, Math.round(raw)));
         };
         const getSceneFramesForIndex = (sceneIndex, fps) => computeLTXFrames(getSceneSecondsForIndex(sceneIndex), fps);
 
@@ -13207,7 +13626,7 @@ async function startGeneration() {
                 title: 'T2I画像生成結果',
             });
 
-            return;  // T2I only — skip video generation
+            return true;  // T2I only — skip video generation
         }
 
         // Special pipeline: Full Auto style character video (I2I + FLF + I2V)
@@ -13575,7 +13994,7 @@ async function startGeneration() {
 
             setSimpleVideoProgress('完了', 1);
             if (typeof showToast === 'function') showToast(`生成が完了しました（${sceneVideoBasenames.length}セグメント・結合まで完了）`, 'success');
-            return;
+            return true;
         }
 
         // Special pipeline: Character video with EDIT composite + Reference selection (char_edit_i2i_flf)
@@ -13955,7 +14374,7 @@ async function startGeneration() {
 
             setSimpleVideoProgress('完了', 1);
             if (typeof showToast === 'function') showToast(`生成が完了しました（${sceneVideoBasenames.length}セグメント・結合まで完了）`, 'success');
-            return;
+            return true;
         }
 
         // Special pipeline: Character video with EDIT composite + scene-cut I2V (no FLF)
@@ -14261,7 +14680,7 @@ async function startGeneration() {
 
             setSimpleVideoProgress('完了', 1);
             if (typeof showToast === 'function') showToast(`生成が完了しました（${sceneCount}シーン・シーンカット形式）`, 'success');
-            return;
+            return true;
         }
 
         // ================================================================
@@ -14634,7 +15053,7 @@ async function startGeneration() {
 
             setSimpleVideoProgress('完了', 1);
             if (typeof showToast === 'function') showToast(`生成が完了しました（${sceneCount}シーン・混在トランジション）`, 'success');
-            return;
+            return true;
         }
 
         const effectiveSteps = getEffectivePresetStepsForCurrentOptions(preset);
@@ -15108,6 +15527,7 @@ async function startGeneration() {
 
         setSimpleVideoProgress('完了', 1);
         if (typeof showToast === 'function') showToast(`生成が完了しました（${scenePrompts.length}シーン・結合まで完了）`, 'success');
+        return true;
     } catch (err) {
         console.error('[SimpleVideo] Generation error:', err);
         const msg = String(err?.message || err || 'Generation failed');
@@ -15118,6 +15538,7 @@ async function startGeneration() {
             setSimpleVideoProgress(`エラー: ${msg}`, 0);
             if (typeof showToast === 'function') showToast(msg, 'error');
         }
+        return false;
     } finally {
         state.isGenerating = false;
         state.activeJobId = null;
