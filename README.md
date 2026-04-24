@@ -682,11 +682,9 @@ curl -s http://127.0.0.1:8090/api/v1/workflows
 
 ### 長尺動画
 
-#### 音楽付き長尺動画サンプル
+#### 音楽付き長尺動画サンプル（long_music_video_sample_20260413.mp4）
 
-- [long_music_video_sample_20260413.mp4](./docs/samples/long_music_video_sample_20260413.mp4)
-
-https://github.com/user-attachments/assets/da13a98c-410a-49ce-b2f2-17f86d4b7e6a
+https://github.com/user-attachments/assets/16f4bcc9-b54a-4dcf-b419-7e3731e0820d
 
 ### MV（音楽付き動画）
 
